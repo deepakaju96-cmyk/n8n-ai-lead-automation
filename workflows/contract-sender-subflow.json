@@ -1,0 +1,65 @@
+{
+    "name": "Contract Sender (Sub-flow)",
+    "description": "Sub-workflow called by both Lead Capture and Opp-won Monitor to send contracts to qualified leads. This workflow is triggered internally via n8n's executeWorkflow node and not exposed externally.",
+    "active": true,
+    "notes": "This is a sub-flow and does not have an external trigger. It is invoked by parent workflows when a lead reaches the contract-ready stage.",
+    "nodes": [
+        {
+            "name": "Receive Lead Data",
+            "type": "n8n-nodes-base.start",
+            "position": [
+                250,
+                300
+            ],
+            "parameters": {}
+        },
+        {
+            "name": "Generate Contract",
+            "type": "n8n-nodes-base.code",
+            "position": [
+                500,
+                300
+            ],
+            "parameters": {
+                "jsCode": "// Contract generation logic - generates PDF contract from lead data"
+            }
+        },
+        {
+            "name": "Send Contract Email",
+            "type": "n8n-nodes-base.gmail",
+            "position": [
+                750,
+                300
+            ],
+            "parameters": {
+                "sendTo": "={{ $json[\"Email\"] }}",
+                "subject": "Your Contract from Our Team",
+                "message": "Contract email body with attachment"
+            }
+        }
+    ],
+    "connections": {
+        "Receive Lead Data": {
+            "main": [
+                [
+                    {
+                        "node": "Generate Contract",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Generate Contract": {
+            "main": [
+                [
+                    {
+                        "node": "Send Contract Email",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

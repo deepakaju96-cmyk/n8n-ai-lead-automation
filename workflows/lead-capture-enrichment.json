@@ -1,0 +1,327 @@
+{
+    "name": "Lead Capture & Enrichment",
+    "active": true,
+    "settings": {
+        "executionOrder": "v1",
+        "binaryMode": "separate"
+    },
+    "nodes": [
+        {
+            "name": "On form submission",
+            "type": "n8n-nodes-base.formTrigger",
+            "typeVersion": 2.5,
+            "position": [
+                0,
+                0
+            ],
+            "parameters": {
+                "formTitle": "Submit a Lead",
+                "formDescription": "Capture new lead information for our sales team",
+                "formFields": {
+                    "values": [
+                        {
+                            "fieldLabel": "Full Name",
+                            "requiredField": true
+                        },
+                        {
+                            "fieldLabel": "Email",
+                            "fieldType": "email",
+                            "requiredField": true
+                        },
+                        {
+                            "fieldLabel": "Company Name",
+                            "requiredField": true
+                        },
+                        {
+                            "fieldLabel": "Phone"
+                        },
+                        {
+                            "fieldLabel": "Company Website"
+                        },
+                        {
+                            "fieldLabel": "Industry"
+                        },
+                        {
+                            "fieldLabel": "Company Size"
+                        },
+                        {
+                            "fieldLabel": "Notes"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Fetch All Leads",
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4.7,
+            "position": [
+                224,
+                0
+            ],
+            "parameters": {
+                "documentId": {
+                    "value": "YOUR_GOOGLE_SHEET_ID",
+                    "mode": "list"
+                },
+                "sheetName": {
+                    "value": "Sheet1",
+                    "mode": "list"
+                },
+                "options": {}
+            },
+            "alwaysOutputData": true,
+            "continueOnFail": true
+        },
+        {
+            "name": "Check Duplicate",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                448,
+                0
+            ],
+            "parameters": {
+                "jsCode": "const allLeads = $input.all();\nconst form = $(\"On form submission\").first().json;\n\nconst formEmail   = (form[\"Email\"]        || \"\").toLowerCase().trim();\nconst formName    = (form[\"Full Name\"]    || \"\").toLowerCase().trim();\nconst formCompany = (form[\"Company Name\"] || \"\").toLowerCase().trim();\n\nfor (const lead of allLeads) {\n  if (!lead.json || lead.json.error) continue;\n\n  const existingEmail   = (lead.json[\"Email\"]        || \"\").toLowerCase().trim();\n  const existingName    = (lead.json[\"Full Name\"]    || \"\").toLowerCase().trim();\n  const existingCompany = (lead.json[\"Company Name\"] || \"\").toLowerCase().trim();\n\n  if (formEmail && existingEmail === formEmail) {\n    return [{ json: { duplicateReason: \"Duplicate email: \" + existingEmail } }];\n  }\n\n  if (formName && formCompany && existingName === formName && existingCompany === formCompany) {\n    return [{ json: { duplicateReason: \"Duplicate name+company: \" + existingName + \" @ \" + existingCompany } }];\n  }\n}\n\nreturn [{ json: { duplicateReason: \"\" } }];"
+            }
+        },
+        {
+            "name": "Is New Lead?",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                672,
+                0
+            ],
+            "parameters": {
+                "conditions": {
+                    "conditions": [
+                        {
+                            "leftValue": "={{ $json.duplicateReason }}",
+                            "rightValue": "",
+                            "operator": {
+                                "type": "string",
+                                "operation": "empty",
+                                "singleValue": true
+                            }
+                        }
+                    ],
+                    "combinator": "and"
+                }
+            }
+        },
+        {
+            "name": "Research Company",
+            "type": "@n8n/n8n-nodes-langchain.googleGemini",
+            "typeVersion": 1.1,
+            "position": [
+                880,
+                0
+            ],
+            "parameters": {
+                "modelId": {
+                    "value": "models/gemini-2.5-flash",
+                    "mode": "list"
+                },
+                "messages": {
+                    "values": [
+                        {
+                            "content": "You are a business intelligence assistant. Research this company thoroughly using web search.\n\nCompany Name: {{ $node[\"On form submission\"].json[\"Company Name\"] }}\nKnown Website: {{ $node[\"On form submission\"].json[\"Company Website\"] }}\nKnown Industry: {{ $node[\"On form submission\"].json[\"Industry\"] }}\n\nReturn ONLY a valid JSON object:\n{\n  \"company_website\": \"official website URL\",\n  \"phone\": \"main contact phone\",\n  \"industry\": \"industry or sector\",\n  \"company_size\": \"employee count or range\",\n  \"about\": \"2-3 paragraph summary of the company\"\n}"
+                        }
+                    ]
+                },
+                "simplify": false,
+                "builtInTools": {
+                    "googleSearch": true
+                }
+            }
+        },
+        {
+            "name": "Parse AI Response",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1104,
+                0
+            ],
+            "parameters": {
+                "jsCode": "const response = $input.first().json;\nconst aiText = response.text || \"\";\nconst form = $(\"On form submission\").first().json;\n\nconst enriched = {\n  company_website: form[\"Company Website\"] || \"\",\n  phone: form[\"Phone\"] || \"\",\n  industry: form[\"Industry\"] || \"\",\n  company_size: form[\"Company Size\"] || \"\",\n  about: \"\"\n};\n\ntry {\n  const cleaned = aiText.replace(/^```[\\w]*\\n?/m, \"\").replace(/```\\s*$/m, \"\").trim();\n  const match = cleaned.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    const parsed = JSON.parse(match[0]);\n    if (!enriched.company_website && parsed.company_website) enriched.company_website = parsed.company_website;\n    if (!enriched.phone && parsed.phone) enriched.phone = parsed.phone;\n    if (!enriched.industry && parsed.industry) enriched.industry = parsed.industry;\n    if (!enriched.company_size && parsed.company_size) enriched.company_size = parsed.company_size;\n    enriched.about = parsed.about || \"\";\n  }\n} catch (e) {\n  enriched.about = \"Research failed: \" + e.message;\n}\n\nreturn [{ json: { ...enriched, \"Full Name\": form[\"Full Name\"], \"Email\": form[\"Email\"], \"Company Name\": form[\"Company Name\"] } }];"
+            }
+        },
+        {
+            "name": "Append to Sheet",
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4.7,
+            "position": [
+                1328,
+                0
+            ],
+            "parameters": {
+                "operation": "append",
+                "documentId": {
+                    "value": "YOUR_GOOGLE_SHEET_ID",
+                    "mode": "list"
+                },
+                "sheetName": {
+                    "value": "Sheet1",
+                    "mode": "list"
+                },
+                "columns": {
+                    "mappingMode": "defineBelow",
+                    "value": {
+                        "Full Name": "={{ $json[\"Full Name\"] }}",
+                        "Email": "={{ $json[\"Email\"] }}",
+                        "Company Name": "={{ $json[\"Company Name\"] }}",
+                        "Phone": "={{ $json[\"Phone\"] }}",
+                        "Company Website": "={{ $json[\"Company Website\"] }}",
+                        "Industry": "={{ $json[\"Industry\"] }}",
+                        "Company Size": "={{ $json[\"Company Size\"] }}",
+                        "About": "={{ $json[\"About\"] }}"
+                    }
+                }
+            }
+        },
+        {
+            "name": "Notify Team on Slack",
+            "type": "n8n-nodes-base.slack",
+            "typeVersion": 2.3,
+            "position": [
+                1552,
+                0
+            ],
+            "parameters": {
+                "select": "channel",
+                "channelId": {
+                    "value": "YOUR_SLACK_CHANNEL",
+                    "mode": "name"
+                },
+                "text": "=:wave: *New Lead - Potential Opportunity*\n\n*Name:* {{ $json[\"Full Name\"] }}\n*Email:* {{ $json[\"Email\"] }}\n*Company:* {{ $json[\"Company Name\"] }}\n*Industry:* {{ $json[\"Industry\"] || \"--\" }}\n\n:brain: *About the company:*\n{{ $json[\"About\"] || \"No enrichment data available.\" }}"
+            }
+        },
+        {
+            "name": "Send Thank You Email",
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [
+                1760,
+                0
+            ],
+            "parameters": {
+                "sendTo": "={{ $(\"On form submission\").first().json[\"Email\"] }}",
+                "subject": "={{ $(\"On form submission\").first().json[\"Full Name\"] }} -- Thank You for Reaching Out",
+                "message": "<p>Hi {{ $(\"On form submission\").first().json[\"Full Name\"] }},</p><p>Thank you for reaching out! We have received your information and our team is reviewing your details.</p><p>Warm regards,<br>The Team</p>"
+            }
+        },
+        {
+            "name": "Call Contract Sender (Sub-flow)",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1.3,
+            "position": [
+                1968,
+                0
+            ],
+            "parameters": {
+                "workflowId": {
+                    "value": "YOUR_SUBFLOW_ID",
+                    "mode": "id"
+                }
+            }
+        }
+    ],
+    "connections": {
+        "On form submission": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch All Leads",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch All Leads": {
+            "main": [
+                [
+                    {
+                        "node": "Check Duplicate",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Check Duplicate": {
+            "main": [
+                [
+                    {
+                        "node": "Is New Lead?",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Is New Lead?": {
+            "main": [
+                [
+                    {
+                        "node": "Research Company",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                []
+            ]
+        },
+        "Research Company": {
+            "main": [
+                [
+                    {
+                        "node": "Parse AI Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse AI Response": {
+            "main": [
+                [
+                    {
+                        "node": "Append to Sheet",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Append to Sheet": {
+            "main": [
+                [
+                    {
+                        "node": "Notify Team on Slack",
+                        "type": "main",
+                        "index": 0
+                    },
+                    {
+                        "node": "Call Contract Sender (Sub-flow)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Notify Team on Slack": {
+            "main": [
+                [
+                    {
+                        "node": "Send Thank You Email",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}

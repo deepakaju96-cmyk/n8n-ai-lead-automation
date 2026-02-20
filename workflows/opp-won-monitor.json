@@ -1,0 +1,98 @@
+{
+    "name": "Opp-won Monitor (Lead Enrichment → Contract Sender)",
+    "active": true,
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "nodes": [
+        {
+            "name": "Check Every 5 Minutes",
+            "type": "n8n-nodes-base.scheduleTrigger",
+            "typeVersion": 1.2,
+            "position": [
+                250,
+                300
+            ],
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {
+                            "field": "minutes",
+                            "minutesInterval": 5
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Find Opp-won Leads",
+            "type": "n8n-nodes-base.googleSheets",
+            "typeVersion": 4.7,
+            "position": [
+                500,
+                300
+            ],
+            "parameters": {
+                "operation": "read",
+                "documentId": {
+                    "value": "YOUR_GOOGLE_SHEET_ID",
+                    "mode": "list"
+                },
+                "sheetName": {
+                    "value": "Sheet1",
+                    "mode": "list"
+                },
+                "filtersUI": {
+                    "values": [
+                        {
+                            "lookupColumn": "Stage",
+                            "lookupValue": "Opp-won"
+                        }
+                    ]
+                }
+            }
+        },
+        {
+            "name": "Send to Contract Sender",
+            "type": "n8n-nodes-base.executeWorkflow",
+            "typeVersion": 1,
+            "position": [
+                800,
+                300
+            ],
+            "parameters": {
+                "workflowId": {
+                    "value": "YOUR_SUBFLOW_ID",
+                    "mode": "id"
+                },
+                "options": {
+                    "waitForSubWorkflow": true
+                }
+            }
+        }
+    ],
+    "connections": {
+        "Check Every 5 Minutes": {
+            "main": [
+                [
+                    {
+                        "node": "Find Opp-won Leads",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Find Opp-won Leads": {
+            "main": [
+                [
+                    {
+                        "node": "Send to Contract Sender",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    }
+}
