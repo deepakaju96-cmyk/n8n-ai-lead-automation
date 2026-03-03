@@ -256,6 +256,7 @@ This project is open source and available under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  Built by <strong>Deepak Raj</strong> — Salesforce Developer & AI Automation Architect<br/>
+  Built by <strong>Deepak Raj</strong> — Salesforce Developer & AI Automation Architect<br/><br/>
+  <a href="https://www.linkedin.com/in/dguna/">🔗 LinkedIn</a> · <a href="https://github.com/deepakaju96-cmyk">💻 GitHub</a><br/><br/>
   <a href="https://n8n.io">n8n</a> · <a href="https://salesforce.com">Salesforce</a> · <a href="https://deepmind.google/technologies/gemini/">Google Gemini AI</a>
 </p>
