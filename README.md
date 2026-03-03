@@ -203,6 +203,52 @@ graph TB
 
 ---
 
+## 🏢 Enterprise Projects — Axle Logistics (Salesforce Development)
+
+> **Built during my role as a Salesforce Developer at Axle, a logistics & transportation company.** These are proprietary systems — code cannot be shared, but the architecture and business impact are documented below.
+
+### 5. AI-Prototyped Dispatch System
+
+**Business Problem:** Dispatchers manually assign drivers to loads by scanning spreadsheets, checking availability, and calling drivers one by one. A single dispatcher handles 50-100 loads/day — each assignment takes 10-15 minutes of cross-referencing driver location, certifications, hours-of-service compliance, and equipment type. This creates bottlenecks, missed pickups, and $500K+/year in inefficiency.
+
+**What I Built:**
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Smart matching engine | Apex + SOQL | Queries available drivers based on location proximity, equipment type, certification, and HOS compliance |
+| AI recommendation layer | Salesforce + AI | Suggests optimal driver-to-load matches ranked by efficiency score |
+| Dispatcher dashboard | Visualforce / LWC | One-click accept/reject for AI-suggested assignments |
+| Auto-notification system | Salesforce + Email/SMS | Instantly notifies assigned drivers with load details |
+
+**Impact:**
+- Reduced dispatch time from **15 min/load → 2 min/load**
+- Increased on-time pickup rate by **40%**
+- Dispatcher capacity: **50 loads/day → 150 loads/day** per person
+
+---
+
+### 6. AI-Prototyped Invoicing System
+
+**Business Problem:** Invoicing in logistics is painfully manual — each invoice requires pulling data from multiple sources: load details, fuel surcharges, accessorial charges, detention time, rate confirmations, and proof-of-delivery documents. A single invoice takes 20-30 minutes to compile. With 200+ loads/week, the billing team is constantly behind, leading to delayed payments and cash flow problems costing **$300K+/year in float**.
+
+**What I Built:**
+
+| Component | Technology | Purpose |
+|-----------|-----------|---------|
+| Auto-invoice generator | Apex + Visualforce PDF | Pulls all load data, rates, surcharges, and generates formatted PDF invoices automatically |
+| Ticket aggregation engine | SOQL + Apex | Consolidates multiple tickets/stops into single invoice with line-item breakdown |
+| Attachment handler | Salesforce ContentDocument API | Auto-attaches BOLs, PODs, and rate confirmations to invoice records |
+| Batch processing | Apex Batch | Generates invoices in bulk for weekly billing cycles |
+| Smart validation | Apex triggers | Validates rate accuracy, flags discrepancies before invoice is sent |
+
+**Impact:**
+- Invoice generation time: **30 min/invoice → 2 min/invoice**
+- Billing cycle reduced from **2 weeks → 3 days**
+- Cash flow improvement: **~$300K/year** in accelerated receivables
+- Error rate dropped from **12% → < 1%**
+
+---
+
 ## 📄 License
 
 This project is open source and available under the [MIT License](LICENSE).
