@@ -90,7 +90,7 @@ graph TB
 
 | Step | What Happens | Business Impact |
 |------|-------------|-----------------|
-| Webhook trigger | Inbound lead captured via form submission | Zero manual data entry |
+| [Web Form Submission](lead-form.html) | Inbound lead captured via simple web UI (Full Name, Email, Company, Website) sending to n8n Webhook | Zero manual data entry |
 | AI Score Agent (Gemini) | Analyzes lead submission, assigns an initial quality score | Instantly separates hot leads from noise |
 | AI Lead Manager (Gemini + DuckDuckGo) | For high-scoring leads, autonomously researches the company live — news, funding, product launches | Reps get rich, real-time intel without any Googling |
 | SF Opportunity creation | Automatically creates a Salesforce Opportunity for verified HOT leads | Pipeline self-populates from inbound |

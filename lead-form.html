@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lead Submission</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #0f0f0f;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 40px;
+      width: 100%;
+      max-width: 480px;
+    }
+
+    .logo {
+      font-size: 13px;
+      font-weight: 600;
+      color: #666;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 32px;
+    }
+
+    h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 14px;
+      color: #666;
+      margin-bottom: 32px;
+      line-height: 1.5;
+    }
+
+    .field {
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: #aaa;
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 11px 14px;
+      background: #111;
+      border: 1px solid #2e2e2e;
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input::placeholder { color: #444; }
+
+    input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.15);
+    }
+
+    button {
+      width: 100%;
+      padding: 13px;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    button:hover { background: #5254cc; }
+    button:active { transform: scale(0.99); }
+    button:disabled { background: #333; color: #666; cursor: not-allowed; }
+
+    .status {
+      margin-top: 18px;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status.success {
+      background: rgba(16,185,129,0.1);
+      border: 1px solid rgba(16,185,129,0.3);
+      color: #10b981;
+    }
+
+    .status.error {
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #ef4444;
+    }
+
+    .status.duplicate {
+      background: rgba(245,158,11,0.1);
+      border: 1px solid rgba(245,158,11,0.3);
+      color: #f59e0b;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">CX Growth Platform</div>
+    <h1>Get in touch</h1>
+    <p class="subtitle">Tell us about your company and we'll be in touch within 24 hours.</p>
+
+    <form id="leadForm">
+      <div class="field">
+        <label for="Name">Full Name</label>
+        <input type="text" id="Name" name="Name" placeholder="Jane Doe" required>
+      </div>
+      <div class="field">
+        <label for="Email">Work Email</label>
+        <input type="email" id="Email" name="Email" placeholder="jane@company.com" required>
+      </div>
+      <div class="field">
+        <label for="Company">Company</label>
+        <input type="text" id="Company" name="Company" placeholder="Acme Inc." required>
+      </div>
+      <div class="field">
+        <label for="Website">Website</label>
+        <input type="url" id="Website" name="Website" placeholder="https://company.com" required>
+      </div>
+
+      <button type="submit" id="submitBtn">Submit</button>
+      <div class="status" id="status"></div>
+    </form>
+  </div>
+
+  <script>
+    const WEBHOOK = "http://localhost:1234/webhook/lead-capture";
+
+    document.getElementById("leadForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const btn = document.getElementById("submitBtn");
+      const status = document.getElementById("status");
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span>Processing...';
+      status.style.display = "none";
+
+      const payload = {
+        Name: document.getElementById("Name").value,
+        Email: document.getElementById("Email").value,
+        Company: document.getElementById("Company").value,
+        Website: document.getElementById("Website").value,
+      };
+
+      try {
+        const res = await fetch(WEBHOOK, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (data.status === "duplicate") {
+          status.className = "status duplicate";
+          status.textContent = "You're already in our system — we'll be in touch soon.";
+        } else {
+          status.className = "status success";
+          status.textContent = "Thanks! We received your info and will reach out shortly.";
+          e.target.reset();
+        }
+      } catch (err) {
+        status.className = "status error";
+        status.textContent = "Something went wrong. Please try again.";
+      }
+
+      status.style.display = "block";
+      btn.disabled = false;
+      btn.textContent = "Submit";
+    });
+  </script>
+</body>
+</html>
