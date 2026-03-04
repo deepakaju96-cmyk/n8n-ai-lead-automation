@@ -3,6 +3,8 @@
 [![n8n](https://img.shields.io/badge/n8n-Workflow%20Automation-FF6D5A?style=for-the-badge&logo=n8n&logoColor=white)](https://n8n.io)
 [![Salesforce](https://img.shields.io/badge/Salesforce-CRM-00A1E0?style=for-the-badge&logo=salesforce&logoColor=white)](https://salesforce.com)
 [![Gemini AI](https://img.shields.io/badge/Google%20Gemini-AI%20Engine-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://deepmind.google/technologies/gemini/)
+[![Groq](https://img.shields.io/badge/Groq-Fast%20LLM-F55036?style=for-the-badge&logoColor=white)](https://groq.com)
+[![Firecrawl](https://img.shields.io/badge/Firecrawl-Web%20Scraping-FF4500?style=for-the-badge&logoColor=white)](https://firecrawl.dev)
 [![Slack](https://img.shields.io/badge/Slack-Alerts-4A154B?style=for-the-badge&logo=slack&logoColor=white)](https://slack.com)
 [![Gmail](https://img.shields.io/badge/Gmail-Automation-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](https://gmail.com)
 [![Google Sheets](https://img.shields.io/badge/Google%20Sheets-Analytics-34A853?style=for-the-badge&logo=googlesheets&logoColor=white)](https://sheets.google.com)
@@ -32,41 +34,47 @@ Most companies hemorrhage money across their revenue operations without realizin
 
 ```mermaid
 graph TB
-    subgraph "1. Intelligent Lead Capture & Enrichment"
-        A["🌐 Web Form"] -->|Submit| B["🔍 Dedup Engine"]
-        B -->|New Lead| C["🤖 Gemini AI Research"]
-        C --> D["📊 Google Sheets"]
-        D --> E["💬 Slack Alert"]
-        D --> F["📧 Auto Thank-You"]
+    subgraph "1. Intelligent Lead Capture & Enrichment — Agentic"
+        A["🌐 Webhook"] -->|Inbound Lead| B["🤖 AI Score Agent\n(Gemini)"]
+        B -->|High Score| C["🔍 AI Lead Manager\n(Gemini + DuckDuckGo)"]
+        C -->|HOT Verified| D["🏆 SF Opportunity"]
+        C -->|WARM/COLD| E["👤 SF Lead Record"]
+        C --> F["💬 Slack HOT Alert"]
     end
 
-    subgraph "2. Revenue Pipeline Orchestrator"
-        G["⏰ Salesforce Trigger"] --> H["📋 Stage Change Detection"]
-        H --> I["🔄 Auto-Update Fields"]
-        I --> J["💬 Rep Notifications"]
+    subgraph "2. Revenue Pipeline Orchestrator — Autonomous Lead Hunter"
+        G["⏰ Every Monday 9AM"] --> H["💡 Build CX Intent Queries"]
+        H --> I["🌐 Firecrawl Search"]
+        I --> J["🔄 SF Duplicate Check"]
+        J --> K["🤖 Qualify Agent\n(Groq)"]
+        K -->|HOT Leads| L["🧠 Lead Manager Agent\n(Groq Critique Loop)"]
+        L --> M["🚨 Slack HOT Alert"]
+        K --> N["👤 SF Lead Creation\n(HOT/WARM/Flagged)"]
     end
 
     subgraph "3. Automated Deal Close & Contract Delivery"
-        K["🏆 Opp Closed-Won"] --> L["📄 Generate Contract"]
-        L --> M["📧 Send to Customer"]
-        M --> N["✅ Update SF Status"]
+        O["🏆 Opp Closed-Won"] --> P["📄 Generate Contract"]
+        P --> Q["📧 Send to Customer"]
+        Q --> R["✅ Update SF Status"]
     end
 
     subgraph "4. Agentic Case Monitor & AI Triage"
-        O["📨 Incoming Email"] --> P["🔍 SF Contact Lookup"]
-        P --> Q["🤖 Gemini Sentiment Analysis"]
-        Q --> R{"🚦 Priority Router"}
-        R -->|Urgent/Angry| S["🚨 Slack Escalation"]
-        R -->|Standard| T["📋 Create SF Case"]
-        T --> U["📧 Auto-Reply"]
+        S["📨 Incoming Email"] --> T["🔍 SF Contact Lookup"]
+        T --> U["🤖 Gemini Sentiment Analysis"]
+        U --> V{"🚦 Priority Router"}
+        V -->|Urgent/Angry| W["🚨 Slack Escalation"]
+        V -->|Standard| X["📋 Create SF Case"]
+        X --> Y["📧 Auto-Reply"]
     end
 
     subgraph "Integrations"
-        V["Salesforce CRM"]
-        W["Google Gemini AI"]
-        X["Slack"]
-        Y["Gmail"]
-        Z["Google Sheets"]
+        Z1["Salesforce CRM"]
+        Z2["Google Gemini AI"]
+        Z3["Groq LLM"]
+        Z4["Firecrawl"]
+        Z5["DuckDuckGo Search"]
+        Z6["Slack"]
+        Z7["Gmail"]
     end
 ```
 
@@ -82,31 +90,39 @@ graph TB
 
 | Step | What Happens | Business Impact |
 |------|-------------|-----------------|
-| Web form submission | Lead captured with 8 fields | Zero manual data entry |
-| Dedup check | JS logic blocks by email or name+company match | No duplicate records polluting the CRM |
-| Gemini AI research | AI searches the web and returns company intel (industry, size, website, summary) | Reps get rich context instantly — no manual Googling |
-| Google Sheets append | Enriched record stored automatically | Single source of truth |
-| Slack notification | Team gets formatted lead card with AI insights | Response time drops from hours to minutes |
-| Gmail auto-reply | Personalized thank-you sent immediately | Lead feels engaged from second one |
+| Webhook trigger | Inbound lead captured via form submission | Zero manual data entry |
+| AI Score Agent (Gemini) | Analyzes lead submission, assigns an initial quality score | Instantly separates hot leads from noise |
+| AI Lead Manager (Gemini + DuckDuckGo) | For high-scoring leads, autonomously researches the company live — news, funding, product launches | Reps get rich, real-time intel without any Googling |
+| SF Opportunity creation | Automatically creates a Salesforce Opportunity for verified HOT leads | Pipeline self-populates from inbound |
+| SF Lead creation | Creates Salesforce Lead records for WARM/COLD prospects for nurture | No lead falls through the cracks |
+| Slack HOT Alert | Instant notification to sales team with full research summary | Response time drops from hours to minutes |
+
+**Agentic Upgrade:** Added a **dual-AI critique loop** — a Scorer Agent does initial qualification, then a Manager Agent conducts live web research to validate and enrich before any Salesforce record is created.
 
 **File:** [`workflows/lead-capture-enrichment.json`](workflows/lead-capture-enrichment.json)
 
 ---
 
-### 2. Revenue Pipeline Orchestrator
+### 2. Revenue Pipeline Orchestrator — Autonomous Lead Hunter
 
-**Business Problem:** Pipeline management is manual and error-prone. Reps forget to update stages, managers can't trust the forecast, and deals silently die in the pipeline without anyone noticing.
+**Business Problem:** Sales teams waste time chasing cold outbound lists. Meanwhile, high-intent companies actively researching solutions go undetected, and pipeline data in Salesforce is always stale and unreliable.
 
 **How It Solves It:**
 
 | Step | What Happens | Business Impact |
 |------|-------------|-----------------|
-| Salesforce trigger | Monitors Opportunity stage changes in real-time | No stale data — pipeline is always current |
-| Auto-field updates | Updates related fields, timestamps, and deal metadata on stage change | Eliminates 15+ min/day of manual CRM hygiene per rep |
-| Smart notifications | Alerts reps and managers on key stage transitions | Deals don't slip through the cracks |
-| Escalation logic | Flags deals stuck too long in a stage | Managers intervene before it's too late |
+| Every Monday 9AM (Schedule) | Workflow auto-runs weekly — no human trigger needed | Fully autonomous prospecting, zero rep effort |
+| Build CX Intent Queries (Code) | Generates targeted search queries for companies with customer experience buying intent | Laser-focused on high-intent prospects |
+| Firecrawl Search (HTTP) | Live web scrape finds matching companies in real-time via Firecrawl API | Fresh, dynamic prospect lists vs. stale static data |
+| SF Duplicate Check (Salesforce) | Cross-references existing CRM records to skip known contacts | No wasted outreach on existing customers |
+| Qualify Agent (Groq AI) | First AI layer analyzes company data and intent signal — categorizes as HOT / WARM / COLD / Flagged | AI-driven qualification at scale, instantly |
+| Lead Manager Agent (Groq AI) | Second AI layer critiques HOT leads — validates quality before alerts fire | Reduces false positives, only the best leads escalate |
+| Slack HOT Alert | Immediate team notification for verified HOT prospects | Sales team focuses only on highest-value opportunities |
+| Salesforce Lead Creation | Auto-creates SF Lead records for HOT, WARM, and Flagged companies | Pipeline grows autonomously every week |
 
-**ROI:** Companies with automated pipeline management see **28% higher win rates** (Salesforce State of Sales Report).
+**Agentic Upgrade:** Transformed from reactive stage-monitoring to a **proactive autonomous lead hunter** — runs every Monday, uses Firecrawl for live web research, and employs a **Worker + Manager AI critique loop** (Groq) to ensure only verified high-intent leads reach the sales team.
+
+**ROI:** Autonomous prospecting eliminates manual lead research — companies with AI-driven pipeline management see **28% higher win rates** (Salesforce State of Sales Report).
 
 ---
 
