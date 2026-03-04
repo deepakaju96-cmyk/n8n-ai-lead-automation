@@ -19,14 +19,14 @@ Most companies hemorrhage money across their revenue operations without realizin
 
 | Problem | Annual Cost to Business | This Suite's Solution |
 |---------|------------------------|----------------------|
-| Sales reps spend **65% of their time** on non-selling tasks (data entry, research, admin) | ~$400K/yr in lost selling time (10-person team) | **Intelligent Lead Capture** auto-enriches leads with AI, eliminates manual research |
-| **79% of leads never convert** due to slow follow-up (avg response time: 42 hours) | ~$300K/yr in lost pipeline value | **Automated enrichment + instant Slack alerts** cut response time to < 5 minutes |
-| Reps manually track deal stages, leading to **stale pipelines and inaccurate forecasts** | ~$250K/yr in slipped deals + bad forecasting | **Revenue Pipeline Orchestrator** auto-updates stages and alerts on stuck deals |
-| Contract generation takes **3-5 days** with manual back-and-forth | ~$150K/yr in delayed revenue recognition | **Automated Deal Close** generates and sends contracts instantly when Opp is won |
+| Sales reps spend **65% of their time** on manual lead research and qualification | ~$400K/yr in lost selling time (10-person team) | **Agentic Lead Capture** uses Gemini & DuckDuckGo to score and deeply research inbound leads autonomously |
+| Outbound teams waste hours scraping cold, low-intent lists | ~$250K/yr in wasted prospecting labor | **Autonomous Lead Hunter** uses Firecrawl & Groq AI to proactively find and qualify high-intent accounts weekly |
+| **79% of leads never convert** due to slow follow-up (avg response time: 42 hours) | ~$300K/yr in lost pipeline value | **Dual-AI qualification + instant Slack alerts** cut prospect response time to < 2 minutes |
+| Contract generation takes **3-5 days** with manual back-and-forth | ~$150K/yr in delayed revenue recognition | **Automated Deal Close** generates and sends contracts instantly when Opportunity is won |
 | Support teams **manually triage every ticket** — slow routing, missed SLAs, angry customers | ~$200K/yr in churn + escalation costs | **AI Triage Engine** uses Gemini to auto-classify sentiment, urgency, and route cases |
 
 **Total addressable waste: ~$1.3M/year for a mid-size company.**  
-**This suite automates all of it.**
+**This suite automates all of it using agentic AI.**
 
 ---
 
