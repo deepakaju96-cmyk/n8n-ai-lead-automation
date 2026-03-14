@@ -1,0 +1,418 @@
+{
+  "name": "AI Outbound Sequencer \u2014 Hot/Warm Leads",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "outbound-trigger-001",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "objectType": "Lead",
+        "returnAll": false,
+        "limit": 3,
+        "options": {
+          "conditionsUi": {
+            "conditionValues": [
+              {
+                "field": "Status",
+                "value": "Enriched"
+              }
+            ]
+          }
+        }
+      },
+      "id": "outbound-query-001",
+      "name": "Query Enriched Leads",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        224,
+        400
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "objectType": "Lead",
+        "objectId": "={{ $json.Id }}"
+      },
+      "id": "outbound-get-lead-001",
+      "name": "Get Lead Details",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        448,
+        400
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $input.first().json;\n\nlet dmLinkedin = '';\nconst desc = lead.Description || '';\nconst linkedinMatch = desc.match(/DM LinkedIn:\\s*(https?:\\/\\/(?:www\\.)?linkedin\\.com\\/in\\/[^\\s]+)/);\nif (linkedinMatch) dmLinkedin = linkedinMatch[1];\n\nlet dmName = '';\nconst dmMatch = desc.match(/Decision Maker:\\s*([^\\u2014\\n]+)/);\nif (dmMatch) dmName = dmMatch[1].trim();\nif (!dmName || dmName === 'Unknown') dmName = (lead.FirstName || '') + ' ' + (lead.LastName || '');\n\nlet icpRating = lead.Rating || 'Cold';\n\nlet product = 'Unknown';\nconst productMatch = desc.match(/Product Interest:\\s*([^\\n]+)/);\nif (productMatch) product = productMatch[1].trim();\nconst prodMatch2 = desc.match(/Product:\\s*([^\\n]+)/);\nif (product === 'Unknown' && prodMatch2) product = prodMatch2[1].trim();\n\nreturn [{\n  json: {\n    leadId: lead.Id,\n    firstName: lead.FirstName || '',\n    lastName: lead.LastName || '',\n    dmName,\n    company: lead.Company || '',\n    title: lead.Title || '',\n    email: lead.Email || '',\n    phone: lead.Phone || '',\n    website: lead.Website || '',\n    city: lead.City || '',\n    state: lead.State || '',\n    country: lead.Country || '',\n    description: desc,\n    icpRating,\n    product,\n    dmLinkedin\n  }\n}];"
+      },
+      "id": "outbound-prep-001",
+      "name": "Prep Lead Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-hot-warm",
+              "leftValue": "={{ $json.icpRating }}",
+              "rightValue": "Cold",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "outbound-if-hot-001",
+      "name": "Is Hot or Warm?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://r.jina.ai/https://html.duckduckgo.com/html/?q=' + encodeURIComponent($json.dmName + ' ' + $json.company + ' ' + $json.title + ' site:linkedin.com/in') }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "outbound-scrape-linkedin-001",
+      "name": "Scrape DM LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        288
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Prep Lead Info').first().json;\n\nlet linkedinProfile = 'No LinkedIn profile data available.';\ntry {\n  const liRaw = $('Scrape DM LinkedIn').first().json;\n  const liText = liRaw.data || liRaw.body || JSON.stringify(liRaw) || '';\n  linkedinProfile = liText.substring(0, 4000);\n} catch(e) {}\n\nreturn [{\n  json: {\n    ...lead,\n    linkedinProfile\n  }\n}];"
+      },
+      "id": "outbound-merge-linkedin-001",
+      "name": "Merge LinkedIn Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Generate a FULL 4-TOUCH outbound email sequence for this veterinary lead. Each touch uses a DIFFERENT angle \u2014 never repeat.\n\nLEAD INFO:\nDM Name: {{ $json.dmName }}\nLead Name: {{ $json.firstName }} {{ $json.lastName }}\nTitle: {{ $json.title }}\nCompany: {{ $json.company }}\nEmail: {{ $json.email }}\nLocation: {{ $json.city }}, {{ $json.state }}\nWebsite: {{ $json.website }}\nICP Rating: {{ $json.icpRating }}\nProduct Fit: {{ $json.product }}\n\nENRICHMENT DATA:\n{{ $json.description }}\n\nLINKEDIN & WEB INTEL:\n{{ $json.linkedinProfile }}\n\n=== PRODUCT KNOWLEDGE ===\n\nNEW LUMEN: PACS takes 30+ sec to load = 45 min/day wasted. Callbacks from bad positioning cost $50-200. Referring vets burn CDs or fight VPN. DICOM errors corrupt archives. NEW LUMEN: web viewer opens in 2 sec, AI Quality Check cuts callbacks 60%, one-click teleconsult URLs, auto DICOM validation, cloud-native no servers. ROI: $15-30K/year saved.\n\nSTABLETRACK AI: No signal at farms = no patient history. Paper notes then 30 min typing. 3 owners 5 horses 1 bill = nightmare. Missing follow-ups. STABLETRACK: voice-to-text hands-free, full offline mode, smart split billing, equine fields (markings/Coggins/farrier), route optimization. ROI: 8-12 hrs/week saved.\n\n=== 4-TOUCH GUIDE ===\n\nTOUCH 1 DAY 1 THE HOOK: Open with specific LinkedIn/website reference. Hit #1 pain with numbers. ONE feature fix. CTA: 15 min this Thursday? Under 120 words.\n\nTOUCH 2 DAY 3 CASE STUDY: Assume no reply. Share specific case: 'A 4-vet equine practice in Texas saved 10 hrs/week' or 'An imaging center in FL cut callbacks 60% in 90 days.' Real practice type, location, before/after numbers. CTA: Want to see how? Under 100 words.\n\nTOUCH 3 DAY 7 ANGLE SHIFT: Different feature than Touch 1. If T1=speed then T3=teleconsult or AI. If T1=offline then T3=billing or voice-to-text. Provocative question. CTA: 10-min demo? Under 100 words.\n\nTOUCH 4 DAY 14 BREAK-UP: Signal finality. Respect their time. One punchy line about what they miss. CTA: If timing is ever right Im here. Under 80 words.\n\n=== RULES ===\n1. Subjects: punchy, max 8 words, curiosity-driven. Examples: 'Your PACS costs you $30K/year' or 'Still typing barn notes at 9pm?'\n2. FORBIDDEN: synergy leverage innovative cutting-edge solution partnership opportunity streamline efficient robust\n3. NEVER SAY: Id love to, I wanted to reach out, I hope this finds you well\n4. Use NUMBERS and SPECIFICS in every touch\n5. Sign off: Deepak Raj, GTM Engineer, Asteris\n6. Each touch = different angle. Never repeat pain points or features.\n7. LinkedIn message: 2 sentences. Reference ONE thing. Ask ONE question.\n\nReturn ONLY valid JSON:\n{\"touch_1\":{\"subject\":\"\",\"body\":\"\",\"day\":1},\"touch_2\":{\"subject\":\"\",\"body\":\"\",\"day\":3},\"touch_3\":{\"subject\":\"\",\"body\":\"\",\"day\":7},\"touch_4\":{\"subject\":\"\",\"body\":\"\",\"day\":14},\"linkedin_message\":\"\",\"personalization_notes\":\"\",\"confidence\":\"\"}",
+        "options": {
+          "systemMessage": "You are a KILLER sales copywriter for Asteris veterinary tech. You punch vets in the gut with their own pain then offer the exact fix. You are NOT polite and boring. Every sentence has a number or concrete example. You NEVER say 'I'd love to show you' or 'I wanted to reach out.' You OPEN with pain CLOSE with a clear ask. Radiology vets hate slow PACS and callbacks. Equine vets hate typing notes at 9pm. You use their LinkedIn posts, VMX booth, team names. Every email feels like you watched their practice for weeks. Return valid JSON only no markdown."
+        }
+      },
+      "id": "outbound-ai-001",
+      "name": "AI Outreach Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1568,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "id": "outbound-groq-001",
+      "name": "Groq - Outreach",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        512
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Merge LinkedIn Data').first().json;\nconst aiRaw = $input.first().json.output || $input.first().json.text || '';\n\nlet seq = {};\ntry {\n  const m = aiRaw.match(/\\{[\\s\\S]*\\}/);\n  if (m) seq = JSON.parse(m[0]);\n} catch(e) {\n  seq = { touch_1: { subject: 'Error', body: aiRaw, day: 1 } };\n}\n\nconst t1 = seq.touch_1 || {};\nconst t2 = seq.touch_2 || {};\nconst t3 = seq.touch_3 || {};\nconst t4 = seq.touch_4 || {};\n\nreturn [{\n  json: {\n    leadId: lead.leadId,\n    dmName: lead.dmName,\n    firstName: lead.firstName,\n    lastName: lead.lastName,\n    company: lead.company,\n    toEmail: lead.email,\n    title: lead.title,\n    product: lead.product,\n    icpRating: lead.icpRating,\n    t1_subject: t1.subject || '',\n    t1_body: t1.body || '',\n    t2_subject: t2.subject || '',\n    t2_body: t2.body || '',\n    t3_subject: t3.subject || '',\n    t3_body: t3.body || '',\n    t4_subject: t4.subject || '',\n    t4_body: t4.body || '',\n    linkedinMessage: seq.linkedin_message || '',\n    personalizationNotes: seq.personalization_notes || '',\n    confidence: seq.confidence || 'low'\n  }\n}];"
+      },
+      "id": "outbound-parse-001",
+      "name": "Parse Outreach Sequence",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\ud83d\udce7 *OUTBOUND SEQUENCE \u2014 REVIEW & APPROVE*\n\n\ud83c\udff7\ufe0f *Lead:* {{ $json.dmName }} ({{ $json.firstName }} {{ $json.lastName }})\n\ud83c\udfe2 *Company:* {{ $json.company }}\n\ud83d\udcbc *Title:* {{ $json.title }}\n\ud83d\udce7 *To:* {{ $json.toEmail }}\n\ud83c\udfaf *Product:* {{ $json.product }}\n\ud83c\udf21\ufe0f *Rating:* {{ $json.icpRating }}\n\ud83d\udcca *Confidence:* {{ $json.confidence }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcc5 *TOUCH 1 \u2014 DAY 1 (THE HOOK)*\n\u2709\ufe0f Subject: {{ $json.t1_subject }}\n\n{{ $json.t1_body }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcc5 *TOUCH 2 \u2014 DAY 3 (CASE STUDY)*\n\u2709\ufe0f Subject: {{ $json.t2_subject }}\n\n{{ $json.t2_body }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcc5 *TOUCH 3 \u2014 DAY 7 (ANGLE SHIFT)*\n\u2709\ufe0f Subject: {{ $json.t3_subject }}\n\n{{ $json.t3_body }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcc5 *TOUCH 4 \u2014 DAY 14 (BREAK-UP)*\n\u2709\ufe0f Subject: {{ $json.t4_subject }}\n\n{{ $json.t4_body }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udd17 *LinkedIn Message:*\n{{ $json.linkedinMessage }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83e\udde0 *Personalization Notes:*\n{{ $json.personalizationNotes }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n_Reply \u2705 to approve all or \u270f\ufe0f with edits_",
+        "otherOptions": {}
+      },
+      "id": "outbound-slack-001",
+      "name": "Slack Approval",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2016,
+        288
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "objectType": "Lead",
+        "objectId": "={{ $json.leadId }}",
+        "updateFields": {
+          "status": "Outreach Pending"
+        }
+      },
+      "id": "outbound-sf-update-001",
+      "name": "Update Lead Status",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        288
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\u2744\ufe0f *Cold Lead Skipped:* {{ $('Prep Lead Info').first().json.dmName }} @ {{ $('Prep Lead Info').first().json.company }} ({{ $('Prep Lead Info').first().json.icpRating }})",
+        "otherOptions": {}
+      },
+      "id": "outbound-slack-skip-001",
+      "name": "Slack Cold Skip",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        512
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [
+        [
+          {
+            "node": "Query Enriched Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Enriched Leads": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Details": {
+      "main": [
+        [
+          {
+            "node": "Prep Lead Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Lead Info": {
+      "main": [
+        [
+          {
+            "node": "Is Hot or Warm?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Hot or Warm?": {
+      "main": [
+        [
+          {
+            "node": "Scrape DM LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Cold Skip",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape DM LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Merge LinkedIn Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge LinkedIn Data": {
+      "main": [
+        [
+          {
+            "node": "AI Outreach Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Outreach Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse Outreach Sequence",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Outreach": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Outreach Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Outreach Sequence": {
+      "main": [
+        [
+          {
+            "node": "Slack Approval",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Lead Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "pinData": {},
+  "id": "outbound-sequencer-001",
+  "active": false
+}

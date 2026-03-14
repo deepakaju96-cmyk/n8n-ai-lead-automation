@@ -1,0 +1,440 @@
+{
+  "name": "AI Content Engine & Competitor Intel",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "content-trigger-001",
+      "name": "Daily Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://r.jina.ai/https://www.asteris.com/",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "content-scrape-asteris-001",
+      "name": "Scrape Asteris.com",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        288
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://r.jina.ai/https://www.stabletrack.ai/",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "content-scrape-stable-001",
+      "name": "Scrape StableTrack.ai",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        512
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const asterisRaw = $('Scrape Asteris.com').first().json;\nconst stableRaw = $('Scrape StableTrack.ai').first().json;\n\nconst asterisContent = (asterisRaw.data || asterisRaw.body || JSON.stringify(asterisRaw) || '').substring(0, 4000);\nconst stableContent = (stableRaw.data || stableRaw.body || JSON.stringify(stableRaw) || '').substring(0, 4000);\n\n// Determine content type by day of week\nconst days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];\nconst today = days[new Date().getDay()];\n\nlet contentType = 'Industry Insight';\nlet product = 'Both';\n\nif (today === 'Mon') { contentType = 'Pain Point Post'; product = 'StableTrack'; }\nif (today === 'Tue') { contentType = 'Feature Spotlight'; product = 'New Lumen'; }\nif (today === 'Wed') { contentType = 'Case Study Snippet'; product = 'StableTrack'; }\nif (today === 'Thu') { contentType = 'AI Demo Pitch'; product = 'New Lumen'; }\nif (today === 'Fri') { contentType = 'Industry Insight'; product = 'Both'; }\nif (today === 'Sat' || today === 'Sun') { contentType = 'Weekend Thought'; product = 'Both'; }\n\nreturn [{\n  json: {\n    asterisContent,\n    stableContent,\n    contentType,\n    product,\n    today\n  }\n}];"
+      },
+      "id": "content-prep-001",
+      "name": "Prep Product Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://r.jina.ai/https://html.duckduckgo.com/html/?q=' + encodeURIComponent('veterinarian PACS imaging DICOM frustration site:linkedin.com') }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "content-ddg-vet-001",
+      "name": "DDG Vet Discussions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        288
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://r.jina.ai/https://html.duckduckgo.com/html/?q=' + encodeURIComponent('IDEXX Cornerstone Covetrus veterinary PACS competitor 2026 site:linkedin.com') }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "content-ddg-comp-001",
+      "name": "DDG Competitor Search",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        512
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep = $('Prep Product Data').first().json;\n\nconst vetRaw = $('DDG Vet Discussions').first().json;\nconst vetData = (vetRaw.data || vetRaw.body || JSON.stringify(vetRaw) || '').substring(0, 4000);\n\nconst compRaw = $('DDG Competitor Search').first().json;\nconst compData = (compRaw.data || compRaw.body || JSON.stringify(compRaw) || '').substring(0, 4000);\n\nreturn [{\n  json: {\n    ...prep,\n    vetDiscussions: vetData,\n    competitorData: compData\n  }\n}];"
+      },
+      "id": "content-merge-001",
+      "name": "Merge All Intel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Write a LinkedIn marketing post for Asteris veterinary tech.\n\nTODAY: {{ $json.today }}\nCONTENT TYPE: {{ $json.contentType }}\nPRODUCT FOCUS: {{ $json.product }}\n\nASTERIS PRODUCT KNOWLEDGE:\n{{ $json.asterisContent }}\n\nSTABLETRACK PRODUCT KNOWLEDGE:\n{{ $json.stableContent }}\n\nVET LINKEDIN DISCUSSIONS (what vets are talking about):\n{{ $json.vetDiscussions }}\n\n=== PRODUCT KNOWLEDGE (USE THIS) ===\n\nKEYSTONE OMNI / NEW LUMEN:\n- Cloud-based veterinary PACS \u2014 view images from any device, anywhere\n- Patented protocols: 3x faster image transfer than standard\n- Lossless compression: 50% storage reduction\n- AI Quality Check: catches positioning errors before patient leaves\n- One-click teleconsult: shareable study URLs, no CDs or VPN\n- Auto DICOM validation: catches header errors on ingest\n- 20+ years trusted by thousands of veterinarians globally\n- Integrates with leading PMS and teleradiology providers\n- ROI: $15-30K/year saved in callbacks, IT, storage\n\nSTABLETRACK AI:\n- First equine-specific PMS built for how equine vets actually work\n- Voice-to-text: dictate notes while examining a horse\n- Full offline mode: works in barns with zero signal\n- Smart split billing: one farm visit, multiple horse owners, one tap\n- Equine-specific fields: markings, breed, discipline, Coggins, farrier\n- Route optimization: groups nearby farm visits, saves 5+ hrs/week\n- ROI: 8-12 hours/week saved on documentation and billing\n\n=== CONTENT TYPE GUIDE ===\n\nPain Point Post: Start with a relatable vet frustration. 'You're in the barn, horse won't stand still, and your notes from last visit are... back at the clinic.' Then pivot to how the product solves it.\n\nFeature Spotlight: Pick ONE feature. Explain what it does, why it matters, and the time/money it saves. Be specific.\n\nCase Study Snippet: Create a believable case study. 'A 6-vet equine practice in Kentucky saved 10 hours/week...' Use real-sounding details.\n\nAI Demo Pitch: Describe a scenario where AI catches an error. 'A tech takes a lateral thorax. AI flags: slight rotation, repeat recommended. The pet is still on the table. No callback needed.'\n\nIndustry Insight: Share a trend. 'Cloud PACS adoption in vet is up 40% YoY. Here's why the holdouts are paying more than they think.'\n\n=== LINKEDIN POST RULES ===\n1. Hook in first line: strong, curiosity-driven, makes them stop scrolling\n2. Short paragraphs: 1-2 sentences each, with line breaks\n3. Include ONE specific number or statistic\n4. End with a question or CTA that drives engagement\n5. 3-5 relevant hashtags at the end\n6. Total: 800-1300 characters (LinkedIn optimal)\n7. NO corporate language. Write like a vet talking to vets.\n8. Include emoji sparingly \u2014 2-3 max\n\nReturn ONLY valid JSON:\n{\"post_text\":\"full LinkedIn post with line breaks\",\"hook\":\"the first line\",\"content_type\":\"the type\",\"product\":\"which product\",\"hashtags\":\"#tag1 #tag2 #tag3\"}",
+        "options": {
+          "systemMessage": "You are a veterinary industry content creator for Asteris. You write LinkedIn posts that PUNCH. You NEVER write generic corporate posts like 'Ever spent 30 minutes searching?' \u2014 that's boring. You write like a frustrated vet ranting to a colleague: 'Your PACS loaded yet? Mine hasn't. That's 45 min of my life today. Gone.' Every post has ONE specific number, ONE real scenario, and ends with a provocative question. You know the difference between IDEXX's generic bloatware and Asteris's purpose-built imaging. You make vets feel SEEN. Return valid JSON only."
+        }
+      },
+      "id": "content-ai-writer-001",
+      "name": "AI Content Writer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1120,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.8
+        }
+      },
+      "id": "content-groq-writer-001",
+      "name": "Groq - Content",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        512
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze competitors of Asteris in the veterinary imaging and practice management space. Generate a competitive intelligence report.\n\nASTERIS PRODUCT KNOWLEDGE:\n{{ $json.asterisContent }}\n\nSTABLETRACK PRODUCT KNOWLEDGE:\n{{ $json.stableContent }}\n\nCOMPETITOR DATA FROM LINKEDIN:\n{{ $json.competitorData }}\n\nVET DISCUSSIONS:\n{{ $json.vetDiscussions }}\n\n=== KEY COMPETITORS TO ANALYZE ===\n\n1. IDEXX (Cornerstone PMS + VetConnect PLUS diagnostics)\n   - Weakness: generic, expensive, not imaging-specific, legacy UI\n   - Asteris edge: purpose-built vet PACS, 3x faster image transfer, AI quality checks\n\n2. Sound/Antech (Teleradiology + diagnostics)\n   - Weakness: slow turnaround, no self-serve cloud viewer, limited integrations\n   - Asteris edge: instant cloud access, one-click teleconsult, 20+ year PACS expertise\n\n3. Covetrus (PMS + supply chain)\n   - Weakness: bloated software, expensive, poor imaging integration, customer complaints\n   - Asteris edge: focused on imaging excellence, better UX, lower cost\n\n4. eVetPractice (Cloud PMS)\n   - Weakness: no offline mode, no equine-specific features, basic imaging\n   - StableTrack edge: full offline, voice-to-text, equine fields, route optimization\n\n5. VetRocket / Equine-specific competitors\n   - Weakness: limited features, no voice-to-text, no offline mode\n   - StableTrack edge: AI-powered, offline, voice-to-text, modern UX\n\n=== WHAT TO ANALYZE ===\n1. What are competitors DOING right now? (new features, partnerships, events, hires)\n2. What are their CUSTOMERS saying? (positive and negative sentiment)\n3. What's their PRICING like? (if discoverable)\n4. Where do they FAIL? (specific pain points their customers mention)\n5. How can Asteris OUTPERFORM them? (specific advantages, positioning)\n6. BATTLECARD: one-liner positioning against each competitor\n\nReturn ONLY valid JSON:\n{\"competitor_updates\":\"what competitors are doing\",\"customer_sentiment\":\"what their customers are saying\",\"where_asteris_wins\":\"specific advantages\",\"battlecard\":{\"idexx\":\"one-liner\",\"sound_antech\":\"one-liner\",\"covetrus\":\"one-liner\",\"evetpractice\":\"one-liner\",\"vetrocket\":\"one-liner\"},\"action_items\":\"what Asteris should do next\",\"confidence\":\"high/medium/low\"}",
+        "options": {
+          "systemMessage": "You are a competitive intelligence analyst for Asteris veterinary tech. You analyze competitors like IDEXX, Cornerstone, Sound/Antech, Covetrus, and eVetPractice. You find what they're doing, what their customers are saying, and where Asteris can win. You are data-driven and specific. You provide actionable battlecards that sales teams can use. IMPORTANT: All values in your JSON response MUST be strings, not arrays or objects. Use bullet points with dashes within strings for lists. Return valid JSON only, no markdown."
+        }
+      },
+      "id": "content-ai-competitor-001",
+      "name": "AI Competitor Analyst",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1120,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "content-groq-comp-001",
+      "name": "Groq - Competitor",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        924
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiRaw = $input.first().json.output || $input.first().json.text || '';\nconst prep = $('Merge All Intel').first().json;\n\nlet post = {};\ntry {\n  const m = aiRaw.match(/\\{[\\s\\S]*\\}/);\n  if (m) post = JSON.parse(m[0]);\n} catch(e) {\n  post = { post_text: aiRaw, hook: '', content_type: prep.contentType, product: prep.product };\n}\n\nreturn [{\n  json: {\n    postText: post.post_text || aiRaw,\n    hook: post.hook || '',\n    contentType: post.content_type || prep.contentType,\n    product: post.product || prep.product,\n    hashtags: post.hashtags || '',\n    today: prep.today\n  }\n}];"
+      },
+      "id": "content-parse-content-001",
+      "name": "Parse Content",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiRaw = $input.first().json.output || $input.first().json.text || '';\n\nfunction toStr(val) {\n  if (val === null || val === undefined) return '';\n  if (typeof val === 'string') return val;\n  if (Array.isArray(val)) return val.map(v => typeof v === 'object' ? JSON.stringify(v) : String(v)).join('\\n- ');\n  if (typeof val === 'object') return Object.entries(val).map(([k,v]) => k + ': ' + (typeof v === 'object' ? JSON.stringify(v) : v)).join('\\n');\n  return String(val);\n}\n\nlet intel = {};\ntry {\n  const m = aiRaw.match(/\\{[\\s\\S]*\\}/);\n  if (m) intel = JSON.parse(m[0]);\n} catch(e) {\n  intel = { competitor_updates: aiRaw, where_asteris_wins: 'Parse error', confidence: 'low' };\n}\n\nconst bc = intel.battlecard || {};\n\nreturn [{\n  json: {\n    competitorUpdates: toStr(intel.competitor_updates),\n    customerSentiment: toStr(intel.customer_sentiment),\n    whereAsterisWins: toStr(intel.where_asteris_wins),\n    bcIdexx: toStr(bc.idexx),\n    bcSoundAntech: toStr(bc.sound_antech),\n    bcCovetrus: toStr(bc.covetrus),\n    bcEvetpractice: toStr(bc.evetpractice),\n    bcVetrocket: toStr(bc.vetrocket),\n    actionItems: toStr(intel.action_items),\n    confidence: toStr(intel.confidence) || 'low'\n  }\n}];"
+      },
+      "id": "content-parse-comp-001",
+      "name": "Parse Competitor Intel",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1344,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0ALJV0EFPU",
+          "mode": "id"
+        },
+        "text": "=\ud83d\udcdd *DAILY CONTENT \u2014 {{ $json.today }} {{ $json.contentType }}*\n\ud83c\udfaf Product: {{ $json.product }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\n{{ $json.postText }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n_Copy \u2192 paste to LinkedIn \u2705_",
+        "otherOptions": {}
+      },
+      "id": "content-slack-content-001",
+      "name": "Slack Content",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        288
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0ALFGJKVGD",
+          "mode": "id"
+        },
+        "text": "=\ud83d\udd0d *COMPETITOR INTEL \u2014 {{ new Date().toLocaleDateString() }}*\n\ud83d\udcca Confidence: {{ $json.confidence }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udce2 *WHAT THEY'RE DOING:*\n{{ $json.competitorUpdates }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\udcac *CUSTOMER SENTIMENT:*\n{{ $json.customerSentiment }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83c\udfaf *WHERE ASTERIS WINS:*\n{{ $json.whereAsterisWins }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u2694\ufe0f *BATTLECARDS:*\nvs IDEXX: {{ $json.bcIdexx }}\nvs Sound/Antech: {{ $json.bcSoundAntech }}\nvs Covetrus: {{ $json.bcCovetrus }}\nvs eVetPractice: {{ $json.bcEvetpractice }}\nvs VetRocket: {{ $json.bcVetrocket }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u2705 *ACTION ITEMS:*\n{{ $json.actionItems }}",
+        "otherOptions": {}
+      },
+      "id": "content-slack-comp-001",
+      "name": "Slack Competitor",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        700
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Daily Trigger": {
+      "main": [
+        [
+          {
+            "node": "Scrape Asteris.com",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape Asteris.com": {
+      "main": [
+        [
+          {
+            "node": "Scrape StableTrack.ai",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scrape StableTrack.ai": {
+      "main": [
+        [
+          {
+            "node": "Prep Product Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Product Data": {
+      "main": [
+        [
+          {
+            "node": "DDG Vet Discussions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DDG Vet Discussions": {
+      "main": [
+        [
+          {
+            "node": "DDG Competitor Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DDG Competitor Search": {
+      "main": [
+        [
+          {
+            "node": "Merge All Intel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge All Intel": {
+      "main": [
+        [
+          {
+            "node": "AI Content Writer",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Competitor Analyst",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Content Writer": {
+      "main": [
+        [
+          {
+            "node": "Parse Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Content": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Content Writer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Competitor Analyst": {
+      "main": [
+        [
+          {
+            "node": "Parse Competitor Intel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Competitor": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Competitor Analyst",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Content": {
+      "main": [
+        [
+          {
+            "node": "Slack Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Competitor Intel": {
+      "main": [
+        [
+          {
+            "node": "Slack Competitor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "pinData": {},
+  "id": "content-engine-001",
+  "active": false
+}

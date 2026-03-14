@@ -1,0 +1,659 @@
+{
+  "name": "Lead Enrichment \u2014 Post-Create Scraper",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 5
+            }
+          ]
+        }
+      },
+      "id": "enrich-trigger-001",
+      "name": "Every 30 Min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "objectType": "Lead",
+        "returnAll": false,
+        "limit": 1,
+        "options": {
+          "conditionsUi": {
+            "conditionValues": [
+              {
+                "field": "Status",
+                "value": "Not Enriched"
+              }
+            ]
+          }
+        }
+      },
+      "id": "enrich-query-001",
+      "name": "Query Not Enriched Leads",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        224,
+        400
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "objectType": "Lead",
+        "objectId": "={{ $json.Id }}"
+      },
+      "id": "enrich-get-lead-001",
+      "name": "Get Lead Details",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        448,
+        400
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const lead = item.json;\n  const company = lead.Company || '';\n  const website = (lead.Website || '').replace(/^https?:\\/\\//, '').replace(/\\/$/, '');\n  const fullWebsite = website ? (website.includes('://') ? website : 'https://' + website) : '';\n\n  return {\n    json: {\n      leadId: lead.Id,\n      company,\n      website: fullWebsite,\n      description: lead.Description || '',\n      city: lead.City || '',\n      state: lead.State || '',\n      country: lead.Country || '',\n      phone: lead.Phone || '',\n      existingEmail: lead.Email || '',\n      existingTitle: lead.Title || '',\n      firstName: lead.FirstName || '',\n      lastName: lead.LastName || '',\n      industry: lead.Industry || '',\n      leadSource: lead.LeadSource || ''\n    }\n  };\n});"
+      },
+      "id": "enrich-prep-001",
+      "name": "Prep Lead Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "enrich-has-website",
+              "leftValue": "={{ $json.website }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "enrich-if-website-001",
+      "name": "Has Website?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        896,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apify.com/v2/acts/apify~website-content-crawler/run-sync-get-dataset-items?token=YOUR_APIFY_TOKEN",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"startUrls\": [{ \"url\": \"{{ $json.website }}\" }],\n  \"maxCrawlPages\": 10,\n  \"maxCrawlDepth\": 2,\n  \"crawlerType\": \"cheerio\",\n  \"includeUrlGlobs\": [\"**/about**\", \"**/team**\", \"**/staff**\", \"**/contact**\", \"**/people**\", \"**/our-team**\", \"**/doctors**\", \"**/veterinarians**\", \"**/leadership**\"],\n  \"maxResults\": 10\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "enrich-apify-crawl-001",
+      "name": "Apify Crawl Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        288
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://r.jina.ai/' + $('Prep Lead Data').first().json.website }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "enrich-jina-001",
+      "name": "Jina Scrape Website",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        288
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Prep Lead Data').first().json;\n\n// Apify crawled pages\nconst apifyPages = $('Apify Crawl Website').all();\nlet apifyContent = '';\nfor (const page of apifyPages) {\n  const d = page.json;\n  const url = d.url || '';\n  const text = d.text || d.markdown || d.body || '';\n  if (text) {\n    apifyContent += '\\n=== PAGE: ' + url + ' ===\\n' + text.substring(0, 3000) + '\\n';\n  }\n}\n\n// Jina homepage content\nconst jinaRaw = $('Jina Scrape Website').first().json;\nconst jinaContent = (jinaRaw.data || jinaRaw.body || JSON.stringify(jinaRaw) || '').substring(0, 4000);\n\n// Combine content\nconst combined = (apifyContent + '\\n=== HOMEPAGE ===\\n' + jinaContent).substring(0, 12000);\n\n// Extract emails from all scraped content\nconst emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}/g;\nconst allEmails = combined.match(emailRegex) || [];\nconst uniqueEmails = [...new Set(allEmails.map(e => e.toLowerCase()))]\n  .filter(e => !e.includes('example.com') && !e.includes('sentry') && !e.includes('wixpress'))\n  .join(', ');\n\n// Extract phone numbers\nconst phoneRegex = /(?:\\+?1[-.\\s]?)?\\(?\\d{3}\\)?[-.\\s]?\\d{3}[-.\\s]?\\d{4}/g;\nconst allPhones = combined.match(phoneRegex) || [];\nconst uniquePhones = [...new Set(allPhones.map(p => p.trim()))].join(', ');\n\nreturn [{\n  json: {\n    ...lead,\n    website_content: combined,\n    scraped_emails: uniqueEmails,\n    scraped_phones: uniquePhones\n  }\n}];"
+      },
+      "id": "enrich-merge-001",
+      "name": "Prep Scraped Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analyze this veterinary company and identify the KEY DECISION MAKER:\n\nCompany: {{ $json.company }}\nWebsite: {{ $json.website }}\nDescription: {{ $json.description }}\nLocation: {{ $json.city }}, {{ $json.state }}, {{ $json.country }}\nExisting Name: {{ $json.firstName }} {{ $json.lastName }}\nExisting Title: {{ $json.existingTitle }}\nExisting Email: {{ $json.existingEmail }}\nExisting Phone: {{ $json.phone }}\n\nSCRAPED EMAILS FOUND: {{ $json.scraped_emails }}\nSCRAPED PHONES FOUND: {{ $json.scraped_phones }}\n\nWEBSITE CONTENT (first 8000 chars):\n{{ $json.website_content }}\n\nINSTRUCTIONS:\n1. Find the PRIMARY DECISION MAKER from the website (look for About, Team, Staff, Contact pages)\n2. Look for: practice owner, medical director, hospital administrator, managing veterinarian, chief vet officer\n3. Match the DM with the BEST email from scraped emails (personal > info@ > generic). Prefer emails with a person's name over contact@ or info@\n4. Match the DM with the best phone (mobile > direct > landline)\n5. Find LinkedIn URL if on the page\n6. Count employees from team page, staff listed, or bios\n7. Find social media: LinkedIn company page, Facebook, Twitter, Instagram\n8. Determine PRODUCT FIT:\n   NEW LUMEN \u2014 cloud-based veterinary PACS. Look for: imaging, radiology, PACS, DICOM, X-ray, ultrasound, teleradiology, diagnostic imaging\n   STABLETRACK AI \u2014 equine PMS. Look for: equine, horse, farrier, lameness, ambulatory vet, AAEP, barn calls\n   Both \u2192 practice does imaging AND equine\n   Neither \u2192 general small animal with no imaging/equine focus\n\nReturn ONLY valid JSON:\n{\n  \"decision_maker_name\": \"Dr. First Last\",\n  \"first_name\": \"\",\n  \"last_name\": \"\",\n  \"title\": \"Owner / Director / etc\",\n  \"email\": \"best email found\",\n  \"phone\": \"best phone found\",\n  \"linkedin\": \"LinkedIn URL or empty\",\n  \"num_employees\": \"1-10 / 11-50 / 51-200 / 200+\",\n  \"product_interest\": \"New Lumen / StableTrack AI / Both / Neither\",\n  \"social_media\": {\n    \"facebook\": \"URL or empty\",\n    \"twitter\": \"URL or empty\",\n    \"instagram\": \"URL or empty\",\n    \"linkedin_company\": \"URL or empty\"\n  },\n  \"specialties\": \"equine, imaging, surgery, etc\",\n  \"confidence\": \"high / medium / low\",\n  \"key_findings\": \"2-3 sentence summary\"\n}",
+        "options": {
+          "systemMessage": "You are a veterinary industry sales intelligence expert for Asteris. Asteris sells: (1) NEW LUMEN \u2014 cloud-based PACS with AI features, replaces Keystone/IDEXX/Cornerstone. (2) STABLETRACK AI \u2014 equine PMS with voice-to-text, offline mode, farm visit workflows. Analyze the scraped website content to find the decision maker, their contact info, LinkedIn, employee count, and social media. Return valid JSON only, no markdown. Never fabricate data \u2014 if unknown say so."
+        }
+      },
+      "id": "enrich-ai-001",
+      "name": "AI Decision Maker Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1568,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "enrich-groq-001",
+      "name": "Groq - DM Agent",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        512
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Prep Scraped Data').first().json;\nconst aiRaw = $input.first().json.output || $input.first().json.text || '';\n\nlet ai = {};\ntry {\n  const m = aiRaw.match(/\\{[\\s\\S]*\\}/);\n  if (m) ai = JSON.parse(m[0]);\n} catch(e) {\n  ai = {};\n}\n\nconst social = ai.social_media || {};\n\nreturn [{\n  json: {\n    leadId: lead.leadId,\n    company: lead.company,\n    website: lead.website,\n    city: lead.city,\n    state: lead.state,\n    country: lead.country,\n    description: lead.description,\n    dm_name: ai.decision_maker_name || '',\n    dm_first: ai.first_name || ai.decision_maker_name?.split(' ')[0] || lead.firstName,\n    dm_last: ai.last_name || ai.decision_maker_name?.split(' ').slice(1).join(' ') || lead.lastName,\n    dm_title: ai.title || lead.existingTitle,\n    dm_email: ai.email || lead.existingEmail,\n    dm_phone: ai.phone || lead.phone,\n    dm_linkedin: ai.linkedin || '',\n    num_employees: ai.num_employees || '',\n    product_interest: ai.product_interest || 'Unknown',\n    specialties: ai.specialties || '',\n    confidence: ai.confidence || 'low',\n    key_findings: ai.key_findings || '',\n    facebook: social.facebook || '',\n    twitter: social.twitter || '',\n    instagram: social.instagram || '',\n    linkedin_company: social.linkedin_company || ''\n  }\n}];"
+      },
+      "id": "enrich-parse-dm-001",
+      "name": "Parse DM Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Score this lead for Asteris ICP fit:\n\nCompany: {{ $json.company }}\nDecision Maker: {{ $json.dm_name }} \u2014 {{ $json.dm_title }}\nEmail: {{ $json.dm_email }}\nPhone: {{ $json.dm_phone }}\nLinkedIn: {{ $json.dm_linkedin }}\nLocation: {{ $json.city }}, {{ $json.state }}, {{ $json.country }}\nEmployees: {{ $json.num_employees }}\nProduct Interest: {{ $json.product_interest }}\nSpecialties: {{ $json.specialties }}\nKey Findings: {{ $json.key_findings }}\n\nSCORING (0-100):\nICP MATCH (0-35): Equine +15, Imaging/PACS +15, 1-10 vets +10, 11-50 +10, North America +5\nTECH PAIN (0-30): Legacy PACS +15, No PMS +15, Digital imaging without PACS +10\nINTENT (0-25): Hiring +10, New equipment +10, Social presence +5, Conference +5\nAUTHORITY (0-10): Owner/C-level +10, Director +7, Staff +3, Unknown +1\n\nHot >= 70, Warm 40-69, Cold < 40. Be CONSERVATIVE.\n\nReturn ONLY JSON:\n{\"icp_score\": 0, \"rating\": \"Hot/Warm/Cold\", \"icp_match_score\": 0, \"tech_pain_score\": 0, \"intent_score\": 0, \"authority_score\": 0, \"product_recommendation\": \"New Lumen/StableTrack AI/Both/Neither\", \"playbook\": \"next action\", \"reasoning\": \"explanation\"}",
+        "options": {
+          "systemMessage": "ICP Scoring Agent for Asteris. Score conservatively. Missing data = 0 points. Return valid JSON only."
+        }
+      },
+      "id": "enrich-icp-001",
+      "name": "ICP Score Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        2016,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.1
+        }
+      },
+      "id": "enrich-groq-icp-001",
+      "name": "Groq - ICP",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        2016,
+        512
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let dm = $('Parse DM Result').first().json;\n\n// Try to get updated LinkedIn from the search fallback path\ntry {\n  const linkedinData = $('Extract LinkedIn URL').first().json;\n  if (linkedinData.dm_linkedin) dm = { ...dm, dm_linkedin: linkedinData.dm_linkedin };\n} catch(e) {\n  // LinkedIn was found on website, no search needed\n}\n\nconst aiRaw = $input.first().json.output || $input.first().json.text || '';\n\nlet icp = {};\ntry {\n  const m = aiRaw.match(/\\{[\\s\\S]*\\}/);\n  if (m) icp = JSON.parse(m[0]);\n} catch(e) {\n  icp = { icp_score: 0, rating: 'Cold', reasoning: 'Parse error' };\n}\n\n// Sanitize values \u2014 SF rejects 'Unknown' in email, phone etc.\nfunction clean(v) { return (!v || v === 'Unknown' || v === 'N/A' || v === 'unknown') ? '' : v; }\nfunction cleanEmail(v) { return (!v || !v.includes('@') || v === 'Unknown') ? '' : v; }\n\nconst social = [dm.facebook, dm.twitter, dm.instagram, dm.linkedin_company].filter(s => s).join(' | ');\nconst descParts = [\n  dm.description || '',\n  '',\n  '=== AI ENRICHMENT ===',\n  'Decision Maker: ' + (dm.dm_name || 'Unknown') + ' \\u2014 ' + (dm.dm_title || 'Unknown'),\n  'DM Email: ' + (dm.dm_email || 'N/A'),\n  'DM Phone: ' + (dm.dm_phone || 'N/A'),\n  'DM LinkedIn: ' + (dm.dm_linkedin || 'N/A'),\n  'Employees: ' + (dm.num_employees || 'Unknown'),\n  'Specialties: ' + (dm.specialties || 'N/A'),\n  'Product Interest: ' + (dm.product_interest || 'Unknown'),\n  'Social: ' + (social || 'None found'),\n  '',\n  '=== ICP SCORE ===',\n  'Score: ' + (icp.icp_score || 0) + '/100 (' + (icp.rating || 'Cold') + ')',\n  'ICP: ' + (icp.icp_match_score || 0) + ' | Pain: ' + (icp.tech_pain_score || 0) + ' | Intent: ' + (icp.intent_score || 0) + ' | Auth: ' + (icp.authority_score || 0),\n  'Product: ' + (icp.product_recommendation || dm.product_interest || 'Unknown'),\n  'Reasoning: ' + (icp.reasoning || 'N/A'),\n  'Playbook: ' + (icp.playbook || 'N/A'),\n  '',\n  '=== KEY FINDINGS ===',\n  dm.key_findings || 'No findings'\n];\n\nreturn [{\n  json: {\n    leadId: dm.leadId,\n    firstName: dm.dm_first || '',\n    lastName: (dm.dm_last || '') + ' - ' + dm.company,\n    email: cleanEmail(dm.dm_email),\n    title: clean(dm.dm_title),\n    phone: clean(dm.dm_phone),\n    mobilePhone: clean(dm.dm_phone),\n    description: descParts.join('\\n'),\n    rating: icp.rating || 'Cold',\n    status: 'Enriched',\n    numberOfEmployees: dm.num_employees || '',\n    product_interest: icp.product_recommendation || dm.product_interest || 'Unknown',\n    icp_score: icp.icp_score || 0,\n    company: dm.company\n  }\n}];"
+      },
+      "id": "enrich-parse-icp-001",
+      "name": "Parse ICP Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "leadId": "={{ $json.leadId }}",
+        "updateFields": {
+          "firstName": "={{ $json.firstName }}",
+          "lastName": "={{ $json.lastName }}",
+          "description": "={{ $json.description }}",
+          "phone": "={{ $json.phone }}",
+          "mobilePhone": "={{ $json.mobilePhone }}",
+          "title": "={{ $json.title }}",
+          "rating": "={{ $json.rating }}",
+          "status": "Enriched"
+        }
+      },
+      "id": "enrich-sf-update-001",
+      "name": "Update SF Lead",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        2464,
+        288
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\ud83d\udd0d *Lead Enriched: {{ $('Parse ICP Score').first().json.company }}*\n\n\ud83d\udc64 *Decision Maker:* {{ $('Parse ICP Score').first().json.firstName }} {{ ($('Parse ICP Score').first().json.lastName || '').split(' - ')[0] }}\n\ud83d\udcbc *Title:* {{ $('Parse ICP Score').first().json.title || 'N/A' }}\n\ud83d\udce7 *Email:* {{ $('Parse ICP Score').first().json.email || 'N/A' }}\n\ud83d\udcf1 *Phone:* {{ $('Parse ICP Score').first().json.phone || 'N/A' }}\n\ud83c\udfaf *Product:* {{ $('Parse ICP Score').first().json.product_interest || 'Unknown' }}\n\ud83d\udcca *ICP Score:* {{ $('Parse ICP Score').first().json.icp_score || 0 }}/100 ({{ $('Parse ICP Score').first().json.rating || 'Cold' }})\n\ud83d\udc65 *Employees:* {{ $('Parse ICP Score').first().json.numberOfEmployees || 'Unknown' }}\n\n_Status: Enriched \u2705_",
+        "otherOptions": {}
+      },
+      "id": "enrich-slack-001",
+      "name": "Slack Enriched",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2688,
+        288
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\u26a0\ufe0f Lead Enrichment skipped \u2014 no website for: {{ $('Prep Lead Data').first().json.company }}",
+        "otherOptions": {}
+      },
+      "id": "enrich-slack-skip-001",
+      "name": "Slack No Website",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        512
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-linkedin-check",
+              "leftValue": "={{ $json.dm_linkedin }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "enrich-if-linkedin-001",
+      "name": "Has LinkedIn?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2016,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ 'https://r.jina.ai/https://html.duckduckgo.com/html/?q=' + encodeURIComponent($json.dm_name + ' ' + $json.company + ' site:linkedin.com/in') }}",
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "id": "enrich-jina-linkedin-001",
+      "name": "Jina Search LinkedIn",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2240,
+        400
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const dm = $('Parse DM Result').first().json;\nconst searchRaw = $input.first().json;\n\nlet linkedinUrl = '';\nconst text = JSON.stringify(searchRaw);\n\n// DDG wraps URLs in redirects like: uddg=https%3A%2F%2Fwww.linkedin.com%2Fin%2Fusername\nconst uddgMatch = text.match(/uddg=(https?%3A%2F%2F(?:www\\.)?linkedin\\.com%2Fin%2F[a-zA-Z0-9_-]+)/);\nif (uddgMatch) {\n  linkedinUrl = decodeURIComponent(uddgMatch[1]);\n}\n\n// Fallback: direct LinkedIn URL\nif (!linkedinUrl) {\n  const directMatch = text.match(/https?:\\/\\/(?:www\\.)?linkedin\\.com\\/in\\/[a-zA-Z0-9_-]+/);\n  if (directMatch) linkedinUrl = directMatch[0];\n}\n\n// Company page fallback\nif (!linkedinUrl) {\n  const compUddg = text.match(/uddg=(https?%3A%2F%2F(?:www\\.)?linkedin\\.com%2Fcompany%2F[a-zA-Z0-9_-]+)/);\n  if (compUddg) linkedinUrl = decodeURIComponent(compUddg[1]);\n  const compDirect = text.match(/https?:\\/\\/(?:www\\.)?linkedin\\.com\\/company\\/[a-zA-Z0-9_-]+/);\n  if (!linkedinUrl && compDirect) linkedinUrl = compDirect[0];\n}\n\nreturn [{\n  json: {\n    ...dm,\n    dm_linkedin: linkedinUrl || dm.dm_linkedin || ''\n  }\n}];"
+      },
+      "id": "enrich-extract-linkedin-001",
+      "name": "Extract LinkedIn URL",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Every 30 Min": {
+      "main": [
+        [
+          {
+            "node": "Query Not Enriched Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Not Enriched Leads": {
+      "main": [
+        [
+          {
+            "node": "Get Lead Details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Lead Details": {
+      "main": [
+        [
+          {
+            "node": "Prep Lead Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Lead Data": {
+      "main": [
+        [
+          {
+            "node": "Has Website?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Website?": {
+      "main": [
+        [
+          {
+            "node": "Apify Crawl Website",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack No Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apify Crawl Website": {
+      "main": [
+        [
+          {
+            "node": "Jina Scrape Website",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jina Scrape Website": {
+      "main": [
+        [
+          {
+            "node": "Prep Scraped Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Scraped Data": {
+      "main": [
+        [
+          {
+            "node": "AI Decision Maker Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Decision Maker Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse DM Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - DM Agent": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Decision Maker Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse DM Result": {
+      "main": [
+        [
+          {
+            "node": "Has LinkedIn?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has LinkedIn?": {
+      "main": [
+        [
+          {
+            "node": "ICP Score Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Jina Search LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Jina Search LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Extract LinkedIn URL",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract LinkedIn URL": {
+      "main": [
+        [
+          {
+            "node": "ICP Score Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ICP Score Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse ICP Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - ICP": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "ICP Score Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse ICP Score": {
+      "main": [
+        [
+          {
+            "node": "Update SF Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update SF Lead": {
+      "main": [
+        [
+          {
+            "node": "Slack Enriched",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "pinData": {},
+  "id": "lead-enrichment-001",
+  "active": false
+}

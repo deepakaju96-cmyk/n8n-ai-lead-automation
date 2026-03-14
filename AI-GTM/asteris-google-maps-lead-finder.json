@@ -1,0 +1,516 @@
+{
+  "name": "Asteris Google Maps Lead Finder",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      },
+      "id": "gmf-trigger-001",
+      "name": "Daily Schedule",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "1C0QilAPhKkZT6cZNZ3LJo0UO1V-uUbSu5X60OphRSN8",
+          "mode": "list",
+          "cachedResultName": "Asteris Lead Scraper - Scraped Leads",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1C0QilAPhKkZT6cZNZ3LJo0UO1V-uUbSu5X60OphRSN8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1C0QilAPhKkZT6cZNZ3LJo0UO1V-uUbSu5X60OphRSN8/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "gmf-read-sheet-001",
+      "name": "Read Existing Leads",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        384
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect existing company names for dedup\nconst sheetRows = $input.all();\nconst existingCompanies = sheetRows\n  .map(r => (r.json.company || '').toLowerCase().trim())\n  .filter(c => c.length > 0);\nconst existingWebsites = sheetRows\n  .map(r => (r.json.company_website || '').toLowerCase().trim())\n  .filter(w => w.length > 0);\n\n// Search queries matching Asteris ICP \u2014 equine vet + imaging/radiology\nconst queries = [\n  'equine veterinary clinic',\n  'equine hospital',\n  'equine practice',\n  'horse veterinarian',\n  'ambulatory equine veterinarian',\n  'veterinary imaging center',\n  'veterinary radiology clinic',\n  'veterinary PACS diagnostic imaging',\n  'teleradiology veterinary',\n  'diagnostic imaging veterinary',\n  'veterinary hospital'\n];\n\nconst states = [\n  'California', 'Texas', 'Florida', 'Kentucky', 'Virginia',\n  'Colorado', 'New York', 'Pennsylvania', 'Oregon', 'Washington',\n  'Arizona', 'Oklahoma', 'North Carolina', 'Georgia', 'Tennessee',\n  'Ohio', 'Michigan', 'Illinois', 'Maryland', 'New Jersey',\n  'Montana', 'Wyoming', 'Idaho', 'New Mexico', 'Missouri',\n  'Connecticut', 'Massachusetts', 'South Carolina', 'Indiana', 'Wisconsin',\n  'Ontario Canada', 'British Columbia Canada', 'Alberta Canada'\n];\n\n// Use lead count to pick which query+state combo\nconst totalLeads = existingCompanies.length;\nconst queryIndex = totalLeads % queries.length;\nconst stateIndex = Math.floor(totalLeads / queries.length) % states.length;\n\nconst searchQuery = queries[queryIndex];\nconst state = states[stateIndex];\n\nreturn [{\n  json: {\n    searchQuery: searchQuery + ' ' + state,\n    state,\n    queryType: searchQuery,\n    existingCompanies,\n    existingWebsites,\n    totalExisting: totalLeads\n  }\n}];"
+      },
+      "id": "gmf-rotation-001",
+      "name": "Rotate Search",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.apify.com/v2/acts/compass~crawler-google-places/run-sync-get-dataset-items?token=YOUR_APIFY_TOKEN",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"searchStringsArray\": [\"{{ $json.searchQuery }}\"],\n  \"maxCrawledPlacesPerSearch\": 5,\n  \"language\": \"en\",\n  \"deeperCityScrape\": false,\n  \"skipClosedPlaces\": true\n}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "gmf-google-maps-001",
+      "name": "Google Maps Scraper",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        672,
+        384
+      ],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const results = $input.all();\nconst existingCompanies = new Set($('Rotate Search').first().json.existingCompanies || []);\nconst existingWebsites = new Set($('Rotate Search').first().json.existingWebsites || []);\n\nconst newClinics = [];\nconst now = new Date().toISOString();\n\nfor (const r of results) {\n  const place = r.json;\n  const name = (place.title || place.name || '').trim();\n  const nameLower = name.toLowerCase();\n  const website = (place.website || place.url || '').toLowerCase().replace(/^https?:\\/\\//, '').replace(/\\/$/, '');\n  const phone = place.phone || place.phoneUnformatted || '';\n  const address = place.address || place.street || '';\n  const city = place.city || '';\n  const state = place.state || '';\n\n  if (!nameLower) continue;\n  if (existingCompanies.has(nameLower)) continue;\n  if (website && existingWebsites.has(website)) continue;\n\n  // Build a ready-to-use lead object\n  newClinics.push({\n    json: {\n      company: name,\n      first_name: '',\n      last_name: name,\n      email: '',\n      phone,\n      company_website: website ? (website.includes('://') ? website : 'https://' + website) : '',\n      title: '',\n      city,\n      state,\n      country: 'United States',\n      org_industry: 'veterinary',\n      org_size: '',\n      source: 'Google Maps Lead Finder',\n      scraped_date: now,\n      name: name,\n      address,\n      rating: place.totalScore || place.rating || '',\n      reviews: place.reviewsCount || place.reviews || 0,\n      category: place.categoryName || place.category || '',\n      has_new: true\n    }\n  });\n}\n\n// Return up to 5 new clinics, or a skip marker\nif (newClinics.length > 0) {\n  return newClinics;\n} else {\n  return [{ json: { has_new: false, skip: true, message: 'No new clinics found' } }];\n}"
+      },
+      "id": "gmf-parse-clinics-001",
+      "name": "Parse & Dedup Clinics",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "gmf-if-new",
+              "leftValue": "={{ $json.has_new }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "gmf-if-new-001",
+      "name": "Has New Leads?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "company": "={{ $json.company }}",
+        "lastname": "={{ $json.last_name || $json.company }}",
+        "additionalFields": {
+          "city": "={{ $json.city }}",
+          "description": "=Source: Google Maps Lead Finder\nRating: {{ $json.rating }} ({{ $json.reviews }} reviews)\nCategory: {{ $json.category }}\nAddress: {{ $json.address }}",
+          "email": "={{ $json.email }}",
+          "firstName": "={{ $json.first_name }}",
+          "industry": "Veterinary",
+          "leadSource": "Google Maps Lead Finder",
+          "phone": "={{ $json.phone }}",
+          "status": "Not Enriched",
+          "title": "={{ $json.title }}",
+          "website": "={{ $json.company_website }}"
+        }
+      },
+      "id": "gmf-sf-create-001",
+      "name": "Create SF Lead",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        1344,
+        272
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1C0QilAPhKkZT6cZNZ3LJo0UO1V-uUbSu5X60OphRSN8",
+          "mode": "list",
+          "cachedResultName": "Asteris Lead Scraper - Scraped Leads",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1C0QilAPhKkZT6cZNZ3LJo0UO1V-uUbSu5X60OphRSN8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gid=0",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1C0QilAPhKkZT6cZNZ3LJo0UO1V-uUbSu5X60OphRSN8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "email",
+              "displayName": "email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "name",
+              "displayName": "name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company",
+              "displayName": "company",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "scraped_date",
+              "displayName": "scraped_date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "first_name",
+              "displayName": "first_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "last_name",
+              "displayName": "last_name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "phone",
+              "displayName": "phone",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "company_website",
+              "displayName": "company_website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "city",
+              "displayName": "city",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "state",
+              "displayName": "state",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "country",
+              "displayName": "country",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "org_size",
+              "displayName": "org_size",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "org_industry",
+              "displayName": "org_industry",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source",
+              "displayName": "source",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "gmf-save-sheet-001",
+      "name": "Log to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1344,
+        496
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\ud83d\uddfa\ufe0f *{{ $json.company }}*\n\ud83d\udcde {{ $json.phone }}\n\ud83c\udf10 {{ $json.company_website || 'No website' }}\n\ud83d\udccd {{ $json.city }}, {{ $json.state }}\n\u2b50 {{ $json.rating }} ({{ $json.reviews }} reviews)\n\ud83d\udcc2 {{ $json.category }}\n\n_Source: Google Maps Lead Finder_",
+        "otherOptions": {}
+      },
+      "id": "gmf-slack-001",
+      "name": "Slack New Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1568,
+        272
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\u26a0\ufe0f Google Maps Lead Finder: No new clinics found\nSearch: {{ $('Rotate Search').first().json.searchQuery }}\nExisting leads: {{ $('Rotate Search').first().json.totalExisting }}",
+        "otherOptions": {}
+      },
+      "id": "gmf-slack-skip-001",
+      "name": "Slack No New",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        700
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Read Existing Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Existing Leads": {
+      "main": [
+        [
+          {
+            "node": "Rotate Search",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rotate Search": {
+      "main": [
+        [
+          {
+            "node": "Google Maps Scraper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Maps Scraper": {
+      "main": [
+        [
+          {
+            "node": "Parse & Dedup Clinics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse & Dedup Clinics": {
+      "main": [
+        [
+          {
+            "node": "Has New Leads?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has New Leads?": {
+      "main": [
+        [
+          {
+            "node": "Create SF Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack No New",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create SF Lead": {
+      "main": [
+        [
+          {
+            "node": "Slack New Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "pinData": {},
+  "id": "google-maps-lead-finder-001",
+  "active": false
+}

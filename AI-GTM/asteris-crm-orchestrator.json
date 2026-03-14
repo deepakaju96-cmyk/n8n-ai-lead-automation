@@ -1,0 +1,485 @@
+{
+  "name": "Asteris \u2014 Web-to-Lead CRM Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Asteris \u2014 Request a Demo",
+        "formDescription": "See how Keystone OMNI or StableTrack AI can transform your veterinary practice.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Full Name",
+              "fieldName": "lead_name",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Email",
+              "fieldType": "email",
+              "fieldName": "email",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Practice / Clinic Name",
+              "fieldName": "company",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Your Role",
+              "fieldName": "job_title",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Veterinarian / DVM"
+                  },
+                  {
+                    "option": "Practice Owner"
+                  },
+                  {
+                    "option": "Practice Manager"
+                  },
+                  {
+                    "option": "Vet Tech / Technologist"
+                  },
+                  {
+                    "option": "IT / Systems Admin"
+                  },
+                  {
+                    "option": "Other"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Practice Type",
+              "fieldName": "practice_type",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Equine"
+                  },
+                  {
+                    "option": "Small Animal"
+                  },
+                  {
+                    "option": "Mixed Practice"
+                  },
+                  {
+                    "option": "Emergency / Specialty"
+                  },
+                  {
+                    "option": "Large Animal"
+                  },
+                  {
+                    "option": "Exotic"
+                  },
+                  {
+                    "option": "Imaging Center / Radiology"
+                  },
+                  {
+                    "option": "University / Teaching"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Interested In",
+              "fieldName": "product_interest",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Keystone OMNI (PACS / Imaging)"
+                  },
+                  {
+                    "option": "StableTrack AI (Equine PMS)"
+                  },
+                  {
+                    "option": "Both"
+                  },
+                  {
+                    "option": "Not sure \u2014 tell me more"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Number of Veterinarians",
+              "fieldType": "number",
+              "fieldName": "num_vets"
+            },
+            {
+              "fieldLabel": "Current PACS / PMS System",
+              "fieldName": "current_system",
+              "placeholder": "e.g. IDEXX, Cornerstone, eVetPractice, paper records..."
+            },
+            {
+              "fieldLabel": "Biggest Pain Point",
+              "fieldName": "pain_point",
+              "fieldType": "textarea",
+              "placeholder": "What frustrates you most about your current workflow?"
+            },
+            {
+              "fieldLabel": "How Did You Hear About Us?",
+              "fieldName": "lead_source",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Google Search"
+                  },
+                  {
+                    "option": "LinkedIn"
+                  },
+                  {
+                    "option": "Conference / Trade Show"
+                  },
+                  {
+                    "option": "Referral from Colleague"
+                  },
+                  {
+                    "option": "Asteris Website"
+                  },
+                  {
+                    "option": "Email Outreach"
+                  },
+                  {
+                    "option": "Other"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "crm-form-001",
+      "name": "Demo Request Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.5,
+      "position": [
+        0,
+        400
+      ],
+      "webhookId": "asteris-demo-request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const f = $input.first().json;\n\nconst nameParts = (f.lead_name || '').trim().split(' ');\nconst firstName = nameParts[0] || '';\nconst lastName = nameParts.slice(1).join(' ') || '';\n\nreturn [{\n  json: {\n    firstName,\n    lastName,\n    fullName: f.lead_name || '',\n    email: f.email || '',\n    company: f.company || '',\n    jobTitle: f.job_title || '',\n    practiceType: f.practice_type || '',\n    productInterest: f.product_interest || '',\n    numVets: f.num_vets || '',\n    currentSystem: f.current_system || '',\n    painPoint: f.pain_point || '',\n    leadSource: f.lead_source || ''\n  }\n}];"
+      },
+      "id": "crm-prep-001",
+      "name": "Prep Form Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Score this inbound veterinary lead and determine routing.\n\nLEAD DATA:\nName: {{ $json.fullName }}\nEmail: {{ $json.email }}\nPractice: {{ $json.company }}\nRole: {{ $json.jobTitle }}\nPractice Type: {{ $json.practiceType }}\nProduct Interest: {{ $json.productInterest }}\nNumber of Vets: {{ $json.numVets }}\nCurrent System: {{ $json.currentSystem }}\nBiggest Pain Point: {{ $json.painPoint }}\nSource: {{ $json.leadSource }}\n\n=== SCORING CRITERIA ===\n\nHIGH INTENT (score 8-10, route: IMMEDIATE):\n- Practice Owner or DVM requesting demo\n- Mentions specific pain (slow PACS, offline needs, billing issues)\n- Currently using a competitor (IDEXX, Cornerstone, etc.) and unhappy\n- Equine practice interested in StableTrack\n- Imaging center interested in PACS\n- 3+ vets = higher deal size\n\nMEDIUM INTENT (score 5-7, route: NURTURE):\n- Vet Tech or Manager (not final decision maker)\n- 'Not sure \u2014 tell me more' on product\n- No specific pain point mentioned\n- Came from website (browsing) vs referral (intent)\n\nLOW INTENT (score 1-4, route: DRIP):\n- Generic email (gmail, yahoo) with no company\n- 'Other' role with no details\n- No pain point, no current system mentioned\n- Possible student or vendor\n\n=== PRODUCT ROUTING ===\nKeystone OMNI: imaging centers, radiology, emergency/specialty, any practice mentioning PACS/DICOM/imaging\nStableTrack: equine practices, large animal, mixed practice with equine\nBoth: mixed practice, or practice mentioning both imaging and equine\n\nReturn ONLY valid JSON:\n{\"score\":8,\"tier\":\"Hot\",\"product_fit\":\"Keystone OMNI\",\"routing\":\"IMMEDIATE\",\"reasoning\":\"Practice owner at imaging center, currently on IDEXX, has specific pain\",\"recommended_action\":\"Schedule demo call within 24 hours\",\"competitor_displacement\":\"IDEXX \u2014 highlight 3x faster transfers and AI quality checks\"}",
+        "options": {
+          "systemMessage": "You are an expert lead scoring AI for Asteris veterinary tech. You evaluate inbound demo requests and score them 1-10 based on intent signals, role seniority, practice type, pain points, and competitor displacement potential. You route Hot leads for immediate follow-up, Warm for nurture sequences, and Cold for drip campaigns. You identify which Asteris product fits best. You are precise, data-driven, and never inflate scores. Return valid JSON only."
+        }
+      },
+      "id": "crm-ai-score-001",
+      "name": "AI Lead Scorer",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        448,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "crm-groq-001",
+      "name": "Groq - Scoring",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        448,
+        624
+      ],
+      "credentials": {
+        "groqApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const lead = $('Prep Form Data').first().json;\nconst aiRaw = $input.first().json.output || $input.first().json.text || '';\n\nlet scoring = {};\ntry {\n  const m = aiRaw.match(/\\{[\\s\\S]*\\}/);\n  if (m) scoring = JSON.parse(m[0]);\n} catch(e) {\n  scoring = { score: 5, tier: 'Warm', routing: 'NURTURE', reasoning: aiRaw };\n}\n\nconst score = scoring.score || 5;\nlet tier = 'Cold';\nif (score >= 8) tier = 'Hot';\nelse if (score >= 5) tier = 'Warm';\n\nreturn [{\n  json: {\n    ...lead,\n    aiScore: score,\n    tier: scoring.tier || tier,\n    productFit: scoring.product_fit || lead.productInterest,\n    routing: scoring.routing || 'NURTURE',\n    reasoning: scoring.reasoning || '',\n    recommendedAction: scoring.recommended_action || '',\n    competitorDisplacement: scoring.competitor_displacement || '',\n    isHighIntent: score >= 8\n  }\n}];"
+      },
+      "id": "crm-parse-001",
+      "name": "Parse AI Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "objectType": "Lead",
+        "lastname": "={{ $json.lastName || $json.fullName }}",
+        "company": "={{ $json.company }}",
+        "additionalFields": {
+          "firstName": "={{ $json.firstName }}",
+          "email": "={{ $json.email }}",
+          "title": "={{ $json.jobTitle }}",
+          "leadSource": "={{ $json.leadSource }}",
+          "status": "={{ $json.tier === 'Hot' ? 'Qualified' : 'Open' }}",
+          "rating": "={{ $json.tier }}",
+          "description": "=Practice Type: {{ $json.practiceType }}\nProduct Interest: {{ $json.productFit }}\nCurrent System: {{ $json.currentSystem }}\nBiggest Pain Point: {{ $json.painPoint }}\nNum Vets: {{ $json.numVets }}\nAI Score: {{ $json.aiScore }}/10\nRouting: {{ $json.routing }}\nReasoning: {{ $json.reasoning }}\nRecommended Action: {{ $json.recommendedAction }}\nCompetitor: {{ $json.competitorDisplacement }}"
+        }
+      },
+      "id": "crm-sf-create-001",
+      "name": "Create SF Lead",
+      "type": "n8n-nodes-base.salesforce",
+      "typeVersion": 1,
+      "position": [
+        896,
+        400
+      ],
+      "credentials": {
+        "salesforceOAuth2Api": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-high-intent",
+              "leftValue": "={{ $('Parse AI Score').first().json.isHighIntent }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "crm-if-hot-001",
+      "name": "High Intent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1120,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\ud83d\udd25 *HIGH-INTENT LEAD \u2014 IMMEDIATE ACTION REQUIRED* \ud83d\udd25\n\n\ud83d\udc64 *{{ $('Parse AI Score').first().json.fullName }}*\n\ud83c\udfe5 {{ $('Parse AI Score').first().json.company }}\n\ud83d\udcbc {{ $('Parse AI Score').first().json.jobTitle }}\n\ud83d\udce7 {{ $('Parse AI Score').first().json.email }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83c\udfaf *AI Score:* {{ $('Parse AI Score').first().json.aiScore }}/10 ({{ $('Parse AI Score').first().json.tier }})\n\ud83d\udce6 *Product Fit:* {{ $('Parse AI Score').first().json.productFit }}\n\ud83c\udfdf\ufe0f *Practice Type:* {{ $('Parse AI Score').first().json.practiceType }}\n\ud83d\udc69\u200d\u2695\ufe0f *Vets:* {{ $('Parse AI Score').first().json.numVets }}\n\ud83d\udda5\ufe0f *Current System:* {{ $('Parse AI Score').first().json.currentSystem }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83d\ude29 *Their Pain Point:*\n{{ $('Parse AI Score').first().json.painPoint }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\ud83e\udde0 *AI Analysis:*\n{{ $('Parse AI Score').first().json.reasoning }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u2694\ufe0f *Competitor Displacement:*\n{{ $('Parse AI Score').first().json.competitorDisplacement }}\n\n\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\n\u2705 *Next Step:* {{ $('Parse AI Score').first().json.recommendedAction }}\n\n_\u23f0 Schedule demo within 24 hours_",
+        "otherOptions": {}
+      },
+      "id": "crm-slack-hot-001",
+      "name": "Slack \ud83d\udd25 Hot Lead Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        288
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0AHVUPRQLF",
+          "mode": "id"
+        },
+        "text": "=\ud83d\udce5 *New Lead \u2014 {{ $('Parse AI Score').first().json.tier }}*\n\n\ud83d\udc64 {{ $('Parse AI Score').first().json.fullName }} @ {{ $('Parse AI Score').first().json.company }}\n\ud83c\udfaf Score: {{ $('Parse AI Score').first().json.aiScore }}/10 | Product: {{ $('Parse AI Score').first().json.productFit }}\n\ud83d\udccc Routing: {{ $('Parse AI Score').first().json.routing }}\n\ud83e\udde0 {{ $('Parse AI Score').first().json.reasoning }}",
+        "otherOptions": {}
+      },
+      "id": "crm-slack-warm-001",
+      "name": "Slack Warm/Cold Lead",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1344,
+        512
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "YOUR_CREDENTIAL_ID",
+          "name": "YOUR_CREDENTIAL"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "text",
+        "completionTitle": "Thanks for reaching out! \ud83c\udf1f",
+        "completionMessage": "We've received your demo request and our team is reviewing it now. Based on your practice needs, we'll reach out within 24 hours with a personalized demo tailored to your workflow.\n\nIn the meantime, check out what Asteris can do: https://www.asteris.com",
+        "options": {}
+      },
+      "id": "crm-respond-001",
+      "name": "Form Confirmation",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Demo Request Form": {
+      "main": [
+        [
+          {
+            "node": "Prep Form Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prep Form Data": {
+      "main": [
+        [
+          {
+            "node": "AI Lead Scorer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Lead Scorer": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Scoring": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Lead Scorer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Score": {
+      "main": [
+        [
+          {
+            "node": "Create SF Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create SF Lead": {
+      "main": [
+        [
+          {
+            "node": "High Intent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Intent?": {
+      "main": [
+        [
+          {
+            "node": "Slack \ud83d\udd25 Hot Lead Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slack Warm/Cold Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack \ud83d\udd25 Hot Lead Alert": {
+      "main": [
+        [
+          {
+            "node": "Form Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack Warm/Cold Lead": {
+      "main": [
+        [
+          {
+            "node": "Form Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "pinData": {},
+  "id": "crm-orchestrator-001",
+  "active": false
+}
